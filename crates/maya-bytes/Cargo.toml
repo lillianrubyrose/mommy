@@ -1,0 +1,8 @@
+[package]
+name = "maya-bytes"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+paste.workspace = true
+thiserror.workspace = true

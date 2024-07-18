@@ -1,0 +1,8 @@
+[package]
+name = "maya-classfile-io"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+maya-bytes.workspace = true
+thiserror.workspace = true

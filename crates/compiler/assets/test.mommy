@@ -1,0 +1,4 @@
+# Hello World
+static fn main(args: Array) {
+    println("Hello World");
+}

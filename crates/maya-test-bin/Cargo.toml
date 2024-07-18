@@ -1,0 +1,8 @@
+[package]
+name = "maya-test-bin"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+maya-classfile-io.workspace = true
+eyre.workspace = true
