@@ -1,7 +1,7 @@
-use std::{io::Cursor, path::PathBuf};
+use std::io::Cursor;
 
 use maya_classfile_io::IOClassFile;
-use maya_classfile_ir::{class_pool::IRCpTag, IRClassFile};
+use maya_classfile_ir::IRClassFile;
 
 const CLASS_BYTES: &[u8] = include_bytes!("../data/Hello.class");
 

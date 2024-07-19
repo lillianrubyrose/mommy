@@ -14,21 +14,18 @@ pub enum BytesError {
 	IO(#[from] std::io::Error),
 }
 
-pub trait BytesExt: Read + Write + Seek {
-	define_integral_rw!(i8, 1);
-	define_integral_rw!(u8, 1);
+pub trait BytesReadExt: Read + Seek {
+	define_integral_r!(i8, 1);
+	define_integral_r!(u8, 1);
 
-	define_integral_rw!(i16, 2);
-	define_integral_rw!(u16, 2);
+	define_integral_r!(i16, 2);
+	define_integral_r!(u16, 2);
 
-	define_integral_rw!(i32, 4);
-	define_integral_rw!(u32, 4);
+	define_integral_r!(i32, 4);
+	define_integral_r!(u32, 4);
 
-	define_integral_rw!(i64, 8);
-	define_integral_rw!(u64, 8);
-
-	define_write!(f32);
-	define_write!(f64);
+	define_integral_r!(i64, 8);
+	define_integral_r!(u64, 8);
 
 	fn len_check(&mut self, needed: u64) -> Result<(), BytesError> {
 		let len = self.stream_len()?;
@@ -39,9 +36,7 @@ pub trait BytesExt: Read + Write + Seek {
 		Ok(())
 	}
 
-	fn read_n_bytes<const N: usize>(
-		&mut self,
-	) -> Result<[u8; N], BytesError> {
+	fn read_n_bytes<const N: usize>(&mut self) -> Result<[u8; N], BytesError> {
 		self.len_check(N as u64)?;
 
 		let mut bytes = [0u8; N];
@@ -49,10 +44,7 @@ pub trait BytesExt: Read + Write + Seek {
 		Ok(bytes)
 	}
 
-	fn read_n_bytes_vec(
-		&mut self,
-		amount: usize,
-	) -> Result<Vec<u8>, BytesError> {
+	fn read_n_bytes_vec(&mut self, amount: usize) -> Result<Vec<u8>, BytesError> {
 		self.len_check(amount as u64)?;
 
 		let mut bytes = vec![0; amount];
@@ -75,13 +67,31 @@ pub trait BytesExt: Read + Write + Seek {
 	}
 }
 
-impl<R: Read + Write + Seek> BytesExt for R {}
+pub trait BytesWriteExt: Write {
+	define_write!(i8);
+	define_write!(u8);
+
+	define_write!(i16);
+	define_write!(u16);
+
+	define_write!(i32);
+	define_write!(u32);
+
+	define_write!(i64);
+	define_write!(u64);
+
+	define_write!(f32);
+	define_write!(f64);
+}
+
+impl<R: Read + Seek> BytesReadExt for R {}
+impl<R: Write> BytesWriteExt for R {}
 
 #[cfg(test)]
 mod tests {
 	use std::io::Cursor;
 
-	use super::BytesExt;
+	use super::*;
 
 	macro_rules! define_test {
 		($ty:ty) => {

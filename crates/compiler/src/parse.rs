@@ -53,10 +53,7 @@ macro_rules! expect_token_value {
 
 impl Parser {
 	pub fn new(tokens: Vec<Token>) -> Self {
-		Self {
-			tokens,
-			token_idx: 0,
-		}
+		Self { tokens, token_idx: 0 }
 	}
 
 	pub fn parse(&mut self) -> ParsedClass {
@@ -73,9 +70,7 @@ impl Parser {
 					self.pop();
 				}
 				Token::Keyword(t) => match t {
-					KeywordToken::Static => {
-						methods.push(self.parse_method())
-					}
+					KeywordToken::Static => methods.push(self.parse_method()),
 					KeywordToken::Fn => todo!(),
 				},
 				Token::Builtin(_) => {
@@ -136,38 +131,22 @@ impl Parser {
 	fn parse_args(&mut self) {
 		while let Some(Token::Ident(_)) = self.peek() {
 			self.pop();
-			self.expect_token(
-				"expected ':'",
-				Token::Ascii(AsciiToken::Colon),
-			);
+			self.expect_token("expected ':'", Token::Ascii(AsciiToken::Colon));
 			expect_token_value!(self, "expected ident", Ident);
 			// TODO: support multiple args
-			self.expect_token(
-				"expected ')'",
-				Token::Ascii(AsciiToken::RParen),
-			);
+			self.expect_token("expected ')'", Token::Ascii(AsciiToken::RParen));
 		}
 	}
 
 	fn parse_method(&mut self) -> ParsedMethod {
 		let modifiers = self.collect_modifiers();
-		self.expect_token(
-			"expected 'fn'",
-			Token::Keyword(KeywordToken::Fn),
-		);
-		let name =
-			expect_token_value!(self, "expected ident", Ident).clone();
-		self.expect_token(
-			"expected '('",
-			Token::Ascii(AsciiToken::LParen),
-		);
+		self.expect_token("expected 'fn'", Token::Keyword(KeywordToken::Fn));
+		let name = expect_token_value!(self, "expected ident", Ident).clone();
+		self.expect_token("expected '('", Token::Ascii(AsciiToken::LParen));
 		dbg!(&name);
 
 		self.parse_args();
-		self.expect_token(
-			"expected '{'",
-			Token::Ascii(AsciiToken::LBrace),
-		);
+		self.expect_token("expected '{'", Token::Ascii(AsciiToken::LBrace));
 		let mut instructions = Vec::new();
 
 		let Some(next) = self.pop() else {
@@ -180,33 +159,19 @@ impl Parser {
 			Token::Keyword(_) => todo!(),
 			Token::Builtin(t) => match t {
 				crate::lex::BuiltinToken::Println => {
-					self.expect_token(
-						"expected '('",
-						Token::Ascii(AsciiToken::LParen),
-					);
-					instructions.push(ParsedInstruction::Println(
-						expect_token_value!(
-							self,
-							"expected string",
-							String
-						),
-					));
-					self.expect_token(
-						"expected ')'",
-						Token::Ascii(AsciiToken::RParen),
-					);
-					self.expect_token(
-						"expected ';'",
-						Token::Ascii(AsciiToken::SemiColon),
-					);
+					self.expect_token("expected '('", Token::Ascii(AsciiToken::LParen));
+					instructions.push(ParsedInstruction::Println(expect_token_value!(
+						self,
+						"expected string",
+						String
+					)));
+					self.expect_token("expected ')'", Token::Ascii(AsciiToken::RParen));
+					self.expect_token("expected ';'", Token::Ascii(AsciiToken::SemiColon));
 				}
 			},
 			Token::Ascii(_) => todo!(),
 		};
-		self.expect_token(
-			"expected '}'",
-			Token::Ascii(AsciiToken::RBrace),
-		);
+		self.expect_token("expected '}'", Token::Ascii(AsciiToken::RBrace));
 
 		// getstatic
 		// ldc (constant pool)

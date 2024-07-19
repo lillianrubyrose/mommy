@@ -70,9 +70,7 @@ pub enum IOCpTag {
 }
 
 impl IOCpTag {
-	pub fn read<B: BytesExt>(
-		buffer: &mut B,
-	) -> Result<IOCpTag, IOClassfileError> {
+	pub fn read<B: BytesReadExt>(buffer: &mut B) -> Result<IOCpTag, IOClassfileError> {
 		let tag = buffer.read_u8()?;
 		match tag {
 			1 => {
@@ -139,10 +137,7 @@ impl IOCpTag {
 
 	pub fn id(&self) -> u8 {
 		match self {
-			IOCpTag::Utf8 {
-				length: _,
-				bytes: _,
-			} => 1,
+			IOCpTag::Utf8 { length: _, bytes: _ } => 1,
 			IOCpTag::Integer { bytes: _ } => 3,
 			IOCpTag::Float { bytes: _ } => 4,
 			IOCpTag::Long {
@@ -177,9 +172,7 @@ impl IOCpTag {
 				reference_kind: _,
 				reference_index: _,
 			} => 15,
-			IOCpTag::MethodType {
-				descriptor_index: _,
-			} => 16,
+			IOCpTag::MethodType { descriptor_index: _ } => 16,
 			IOCpTag::InvokeDynamic {
 				bootstrap_method_attr_index: _,
 				name_and_ty_index: _,
@@ -187,10 +180,7 @@ impl IOCpTag {
 		}
 	}
 
-	pub fn write<B: BytesExt>(
-		&self,
-		buffer: &mut B,
-	) -> Result<(), IOClassfileError> {
+	pub fn write<B: BytesWriteExt>(&self, buffer: &mut B) -> Result<(), IOClassfileError> {
 		buffer.write_u8(self.id())?;
 		match self {
 			IOCpTag::Utf8 { length, bytes } => {
@@ -217,12 +207,8 @@ impl IOCpTag {
 				// buffer.write_all(high_bytes)?;
 				// buffer.write_all(low_bytes)?;
 			}
-			IOCpTag::Class { name_index } => {
-				buffer.write_u16(*name_index)?
-			}
-			IOCpTag::String { utf8_index } => {
-				buffer.write_u16(*utf8_index)?
-			}
+			IOCpTag::Class { name_index } => buffer.write_u16(*name_index)?,
+			IOCpTag::String { utf8_index } => buffer.write_u16(*utf8_index)?,
 			IOCpTag::FieldRef {
 				class_index,
 				name_and_ty_index,

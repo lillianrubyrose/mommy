@@ -15,7 +15,7 @@ macro_rules! define_write {
 }
 
 #[macro_export]
-macro_rules! define_integral_rw {
+macro_rules! define_integral_r {
 	($ty:ty, $bytes:expr) => {
 		paste::item! {
 		fn [<read_$ty>](
@@ -28,7 +28,5 @@ macro_rules! define_integral_rw {
 			Ok($ty::from_be_bytes(data))
 		}
 		}
-
-		define_write!($ty);
 	};
 }

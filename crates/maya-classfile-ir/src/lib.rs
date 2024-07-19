@@ -1,7 +1,12 @@
-use class_pool::{CPUtf8Ref, IRCpTag};
-use maya_classfile_io::IOClassFile;
+use std::cmp::Ordering;
 
+use attribute::IRAttributeInfo;
+use class_pool::{CPUtf8Ref, IRClassfileError, IRCpTag};
+use maya_classfile_io::{IOClassFile, IOFieldInfo, IOMethodInfo};
+
+pub mod attribute;
 pub mod class_pool;
+pub mod code;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ClassFileVersion {
@@ -10,17 +15,17 @@ pub struct ClassFileVersion {
 }
 
 impl PartialOrd for ClassFileVersion {
-	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
 		Some(self.cmp(other))
 	}
 }
 
 impl Ord for ClassFileVersion {
-	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+	fn cmp(&self, other: &Self) -> Ordering {
 		match self.major.cmp(&other.major) {
-			std::cmp::Ordering::Less => std::cmp::Ordering::Less,
-			std::cmp::Ordering::Equal => self.minor.cmp(&other.minor),
-			std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
+			Ordering::Less => Ordering::Less,
+			Ordering::Equal => self.minor.cmp(&other.minor),
+			Ordering::Greater => Ordering::Greater,
 		}
 	}
 }
@@ -38,6 +43,72 @@ impl AccessFlags {
 }
 
 #[derive(Debug)]
+pub struct IRFieldInfo {
+	pub access_flags: u16,
+	pub name: CPUtf8Ref,
+	pub descriptor: CPUtf8Ref,
+	pub attributes: Vec<IRAttributeInfo>,
+}
+
+impl IRFieldInfo {
+	pub fn from_io(cp: &[IRCpTag], raw: IOFieldInfo) -> Result<Self, IRClassfileError> {
+		let name = CPUtf8Ref::new(
+			raw.name_index,
+			cp.get(raw.name_index as usize - 1).expect("invalid idx"),
+		);
+		let descriptor = CPUtf8Ref::new(
+			raw.descriptor_index,
+			cp.get(raw.descriptor_index as usize - 1).expect("invalid idx"),
+		);
+		let attributes = raw
+			.attributes
+			.into_iter()
+			.map(|attr| IRAttributeInfo::from_io(cp, attr))
+			.collect::<Result<Vec<_>, _>>()?;
+
+		Ok(Self {
+			access_flags: raw.access_flags,
+			name,
+			descriptor,
+			attributes,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct IRMethodInfo {
+	pub access_flags: u16,
+	pub name: CPUtf8Ref,
+	pub descriptor: CPUtf8Ref,
+	pub attributes: Vec<IRAttributeInfo>,
+}
+
+impl IRMethodInfo {
+	pub fn from_io(cp: &[IRCpTag], raw: IOMethodInfo) -> Result<Self, IRClassfileError> {
+		let name = CPUtf8Ref::new(
+			raw.name_index,
+			cp.get(raw.name_index as usize - 1).expect("invalid idx"),
+		);
+		let descriptor = CPUtf8Ref::new(
+			raw.descriptor_index,
+			cp.get(raw.descriptor_index as usize - 1).expect("invalid idx"),
+		);
+		let attributes = raw
+			.attributes
+			.into_iter()
+			.map(|attr| IRAttributeInfo::from_io(cp, attr))
+			.collect::<Result<Vec<_>, _>>()?;
+
+		Ok(Self {
+			access_flags: raw.access_flags,
+			name,
+			descriptor,
+			attributes,
+		})
+	}
+}
+
+#[derive(Debug)]
 pub struct IRClassFile {
 	pub magic: u32,
 	pub version: ClassFileVersion,
@@ -46,10 +117,13 @@ pub struct IRClassFile {
 	pub this_class: CPUtf8Ref,
 	pub super_class: CPUtf8Ref,
 	pub interfaces: Vec<CPUtf8Ref>,
+	pub fields: Vec<IRFieldInfo>,
+	pub methods: Vec<IRMethodInfo>,
+	pub attributes: Vec<IRAttributeInfo>,
 }
 
 impl IRClassFile {
-	pub fn from_io(raw: IOClassFile) -> Self {
+	pub fn from_io(raw: IOClassFile) -> Result<Self, IRClassfileError> {
 		let magic = raw.magic;
 		let version = ClassFileVersion {
 			major: raw.major_version,
@@ -65,8 +139,23 @@ impl IRClassFile {
 			.copied()
 			.map(|idx| CPUtf8Ref::new(idx, cp.get(idx as usize - 1).unwrap()))
 			.collect();
+		let fields = raw
+			.fields
+			.into_iter()
+			.map(|f| IRFieldInfo::from_io(&cp, f))
+			.collect::<Result<Vec<_>, _>>()?;
+		let methods = raw
+			.methods
+			.into_iter()
+			.map(|f| IRMethodInfo::from_io(&cp, f))
+			.collect::<Result<Vec<_>, _>>()?;
+		let attributes = raw
+			.attributes
+			.into_iter()
+			.map(|attr| IRAttributeInfo::from_io(&cp, attr))
+			.collect::<Result<Vec<_>, _>>()?;
 
-		Self {
+		Ok(Self {
 			magic,
 			version,
 			cp,
@@ -74,6 +163,9 @@ impl IRClassFile {
 			this_class,
 			super_class,
 			interfaces,
-		}
+			fields,
+			methods,
+			attributes,
+		})
 	}
 }

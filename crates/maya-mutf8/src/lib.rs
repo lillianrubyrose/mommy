@@ -28,10 +28,7 @@ pub fn encode(string: &str) -> Vec<u8> {
 			c @ 0..=0x7F => bytes.push(c as u8),
 
 			// 2 byte encoding
-			c @ 0..=0x7FF => bytes.extend([
-				0xC0 | 0x1F & (c >> 0x06) as u8,
-				0x80 | (0x3F & c) as u8,
-			]),
+			c @ 0..=0x7FF => bytes.extend([0xC0 | 0x1F & (c >> 0x06) as u8, 0x80 | (0x3F & c) as u8]),
 
 			// 3 byte encoding
 			c @ 0..=0x7FFF => bytes.extend([
@@ -208,9 +205,6 @@ mod tests {
 	fn decode_codepoint_bad_input_length() {
 		let input = b"\xC2";
 		let result = decode(input);
-		assert!(matches!(
-			result,
-			Err(MUTFError::CodepointBadInputLength(2))
-		));
+		assert!(matches!(result, Err(MUTFError::CodepointBadInputLength(2))));
 	}
 }

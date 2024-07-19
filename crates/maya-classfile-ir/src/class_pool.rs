@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use maya_bytes::BytesError;
 use maya_classfile_io::class_pool::IOCpTag;
 use maya_mutf8::MUTFError;
 use thiserror::Error;
@@ -8,6 +9,8 @@ use thiserror::Error;
 pub enum IRClassfileError {
 	#[error("{0}")]
 	Mutf8(#[from] MUTFError),
+	#[error("{0}")]
+	Bytes(#[from] BytesError),
 }
 
 // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-5.html#jvms-5.4.3.5
@@ -65,6 +68,24 @@ impl CPUtf8Ref {
 }
 
 #[derive(Debug, Clone)]
+pub struct CPClassRef {
+	pub data: CPUtf8Ref,
+	pub index: u16,
+}
+
+impl CPClassRef {
+	pub fn new(index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::Class(this) => Self {
+				data: this.clone(),
+				index,
+			},
+			_ => panic!("trying to make CPUtf8Ref from non-utf8 tag. {utf8_tag:?}"),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct CPNameAndTypeRef {
 	pub index: u16,
 	pub name: CPUtf8Ref,
@@ -77,6 +98,17 @@ pub struct CPMethodHandleRef {
 	pub kind: IRMethodRefKind,
 	pub ref_tag: Box<IRCpTag>,
 	pub ref_index: u16,
+}
+
+#[macro_export]
+macro_rules! get_from_cp {
+	($cp:ident, $idx:expr, $ty:ident) => {{
+		match $cp.get($idx as usize - 1).expect("fuck") {
+			crate::class_pool::IRCpTag::$ty(v) => v,
+			t => panic!("expected different type: {} | got: {t:?}", stringify!($ty)),
+		}
+		.clone()
+	}};
 }
 
 #[derive(Debug, Clone)]
@@ -129,7 +161,7 @@ macro_rules! parse_tag_idx {
 impl IRCpTag {
 	fn parse_tag(tag: &IOCpTag, raw_tags: &[IOCpTag], formed_tags: &[IRCpTag]) -> Result<IRCpTag, IRClassfileError> {
 		Ok(match tag {
-			IOCpTag::Utf8 { length: _, bytes } => IRCpTag::Utf8(Rc::new(maya_mutf8::decode(&bytes)?)),
+			IOCpTag::Utf8 { length: _, bytes } => IRCpTag::Utf8(Rc::new(maya_mutf8::decode(bytes)?)),
 			IOCpTag::Integer { bytes } => IRCpTag::Integer(i32::from_be_bytes(*bytes)),
 			IOCpTag::Float { bytes } => IRCpTag::Float(f32::from_be_bytes(*bytes)),
 			IOCpTag::Long { bytes } => IRCpTag::Long(i64::from_be_bytes(*bytes)),
@@ -147,7 +179,7 @@ impl IRCpTag {
 				name_and_ty_index,
 			} => {
 				let (name, ty) = match parse_tag_idx!(name_and_ty_index, raw_tags, formed_tags)
-					.expect(&format!("invalid FieldRef name_and_ty_index"))
+					.expect("invalid FieldRef name_and_ty_index")
 				{
 					IRCpTag::NameAndType { name, descriptor } => (name, descriptor),
 					t => panic!("expected NameAndType. got {t:?}"),
@@ -166,7 +198,7 @@ impl IRCpTag {
 				name_and_ty_index,
 			} => {
 				let (name, ty) = match parse_tag_idx!(name_and_ty_index, raw_tags, formed_tags)
-					.expect(&format!("invalid MethodRef name_and_ty_index"))
+					.expect("invalid MethodRef name_and_ty_index")
 				{
 					IRCpTag::NameAndType { name, descriptor } => (name, descriptor),
 					t => panic!("expected NameAndType. got {t:?}"),
@@ -185,7 +217,7 @@ impl IRCpTag {
 				name_and_ty_index,
 			} => {
 				let (name, ty) = match parse_tag_idx!(name_and_ty_index, raw_tags, formed_tags)
-					.expect(&format!("invalid InterfaceMethodRef name_and_ty_index"))
+					.expect("invalid InterfaceMethodRef name_and_ty_index")
 				{
 					IRCpTag::NameAndType { name, descriptor } => (name, descriptor),
 					t => panic!("expected NameAndType. got {t:?}"),
@@ -232,7 +264,7 @@ impl IRCpTag {
 				name_and_ty_index,
 			} => {
 				let (name, ty) = match parse_tag_idx!(name_and_ty_index, raw_tags, formed_tags)
-					.expect(&format!("invalid InvokeDynamic name_and_ty_index"))
+					.expect("invalid InvokeDynamic name_and_ty_index")
 				{
 					IRCpTag::NameAndType { name, descriptor } => (name, descriptor),
 					t => panic!("expected NameAndType. got {t:?}"),

@@ -94,10 +94,7 @@ impl Lexer {
 				'}' => tokens.push(Token::Ascii(AsciiToken::RBrace)),
 
 				c if c.is_ascii_alphabetic() => {
-					let ident = format!(
-						"{c}{}",
-						self.pop_until(|c| !c.is_ascii_alphanumeric())
-					);
+					let ident = format!("{c}{}", self.pop_until(|c| !c.is_ascii_alphanumeric()));
 					tokens.push(match ident.as_str() {
 						"static" => Token::Keyword(KeywordToken::Static),
 						"fn" => Token::Keyword(KeywordToken::Fn),
@@ -116,10 +113,7 @@ impl Lexer {
 
 				' ' => {}
 				'\n' => {}
-				_ => panic!(
-					"Don't know what to do with: {chr} : {}",
-					chr as i32
-				),
+				_ => panic!("Don't know what to do with: {chr} : {}", chr as i32),
 			}
 		}
 

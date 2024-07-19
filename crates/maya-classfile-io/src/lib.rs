@@ -35,9 +35,7 @@ pub struct IOClassFile {
 }
 
 impl IOClassFile {
-	pub fn read<B: BytesExt>(
-		buffer: &mut B,
-	) -> Result<IOClassFile, IOClassfileError> {
+	pub fn read<B: BytesReadExt>(buffer: &mut B) -> Result<IOClassFile, IOClassfileError> {
 		let magic = buffer.read_u32()?;
 		if magic != 0xCAFEBABE {
 			return Err(IOClassfileError::InvalidMagic);
@@ -94,10 +92,7 @@ impl IOClassFile {
 		})
 	}
 
-	pub fn write<B: BytesExt>(
-		&self,
-		buffer: &mut B,
-	) -> Result<(), IOClassfileError> {
+	pub fn write<B: BytesWriteExt>(&self, buffer: &mut B) -> Result<(), IOClassfileError> {
 		buffer.write_u32(self.magic)?;
 		buffer.write_u16(self.minor_version)?;
 		buffer.write_u16(self.major_version)?;
@@ -136,9 +131,7 @@ pub struct IOAttributeInfo {
 }
 
 impl IOAttributeInfo {
-	pub fn read<B: BytesExt>(
-		buffer: &mut B,
-	) -> Result<IOAttributeInfo, BytesError> {
+	pub fn read<B: BytesReadExt>(buffer: &mut B) -> Result<IOAttributeInfo, BytesError> {
 		let attribute_name_index = buffer.read_u16()?;
 		let attribute_length = buffer.read_u32()?;
 		Ok(IOAttributeInfo {
@@ -148,10 +141,7 @@ impl IOAttributeInfo {
 		})
 	}
 
-	pub fn write<B: BytesExt>(
-		&self,
-		buffer: &mut B,
-	) -> Result<(), IOClassfileError> {
+	pub fn write<B: BytesWriteExt>(&self, buffer: &mut B) -> Result<(), IOClassfileError> {
 		buffer.write_u16(self.attribute_name_index)?;
 		buffer.write_u32(self.attribute_length)?;
 		buffer.write_all(&self.info)?;
@@ -169,9 +159,7 @@ pub struct IOFieldInfo {
 }
 
 impl IOFieldInfo {
-	pub fn read<B: BytesExt>(
-		buffer: &mut B,
-	) -> Result<IOFieldInfo, BytesError> {
+	pub fn read<B: BytesReadExt>(buffer: &mut B) -> Result<IOFieldInfo, BytesError> {
 		let access_flags = buffer.read_u16()?;
 		let name_index = buffer.read_u16()?;
 		let descriptor_index = buffer.read_u16()?;
@@ -190,10 +178,7 @@ impl IOFieldInfo {
 		})
 	}
 
-	pub fn write<B: BytesExt>(
-		&self,
-		buffer: &mut B,
-	) -> Result<(), IOClassfileError> {
+	pub fn write<B: BytesWriteExt>(&self, buffer: &mut B) -> Result<(), IOClassfileError> {
 		buffer.write_u16(self.access_flags)?;
 		buffer.write_u16(self.name_index)?;
 		buffer.write_u16(self.descriptor_index)?;
@@ -215,9 +200,7 @@ pub struct IOMethodInfo {
 }
 
 impl IOMethodInfo {
-	pub fn read<B: BytesExt>(
-		buffer: &mut B,
-	) -> Result<IOMethodInfo, IOClassfileError> {
+	pub fn read<B: BytesReadExt>(buffer: &mut B) -> Result<IOMethodInfo, IOClassfileError> {
 		let access_flags = buffer.read_u16()?;
 		let name_index = buffer.read_u16()?;
 		let descriptor_index = buffer.read_u16()?;
@@ -236,10 +219,7 @@ impl IOMethodInfo {
 		})
 	}
 
-	pub fn write<B: BytesExt>(
-		&self,
-		buffer: &mut B,
-	) -> Result<(), IOClassfileError> {
+	pub fn write<B: BytesWriteExt>(&self, buffer: &mut B) -> Result<(), IOClassfileError> {
 		buffer.write_u16(self.access_flags)?;
 		buffer.write_u16(self.name_index)?;
 		buffer.write_u16(self.descriptor_index)?;
