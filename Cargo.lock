@@ -41,6 +41,11 @@ dependencies = [
 [[package]]
 name = "maya-classfile-ir"
 version = "0.0.1-dev"
+dependencies = [
+ "maya-classfile-io",
+ "maya-mutf8",
+ "thiserror",
+]
 
 [[package]]
 name = "maya-classfile-verifier"
@@ -59,6 +64,7 @@ version = "0.0.1-dev"
 dependencies = [
  "eyre",
  "maya-classfile-io",
+ "maya-classfile-ir",
 ]
 
 [[package]]

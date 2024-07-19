@@ -5,4 +5,5 @@ edition.workspace = true
 
 [dependencies]
 maya-classfile-io.workspace = true
+maya-classfile-ir.workspace = true
 eyre.workspace = true

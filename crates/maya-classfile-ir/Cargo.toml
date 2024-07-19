@@ -6,3 +6,6 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+maya-classfile-io.workspace = true
+maya-mutf8.workspace = true
+thiserror.workspace = true

@@ -1,24 +1,10 @@
 use maya_bytes::*;
 
-use crate::ClassfileIOError;
-
-// https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-5.html#jvms-5.4.3.5
-#[repr(u8)]
-pub enum MethodRefKind {
-	GetField = 1,
-	GetStatic,
-	PutField,
-	PutStatic,
-	InvokeVirtual,
-	InvokeStatic,
-	InvokeSpecial,
-	NewInvokeSpecial,
-	InvokeInterface,
-}
+use crate::IOClassfileError;
 
 #[derive(Debug)]
 #[repr(u8)]
-pub enum CpTag {
+pub enum IOCpTag {
 	// https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.7
 	Utf8 {
 		length: u16,
@@ -36,12 +22,14 @@ pub enum CpTag {
 	// at index n, then the next usable item in the pool is located at index n+2.
 	// The constant_pool index n+1 must be valid but is considered unusable.
 	Long {
-		high_bytes: [u8; 4],
-		low_bytes: [u8; 4],
+		bytes: [u8; 8],
+		// high_bytes: [u8; 4],
+		// low_bytes: [u8; 4],
 	} = 5,
 	Double {
-		high_bytes: [u8; 4],
-		low_bytes: [u8; 4],
+		bytes: [u8; 8],
+		// high_bytes: [u8; 4],
+		// low_bytes: [u8; 4],
 	} = 6,
 	Class {
 		name_index: u16,
@@ -77,14 +65,14 @@ pub enum CpTag {
 	// https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.10
 	InvokeDynamic {
 		bootstrap_method_attr_index: u16,
-		name_and_type_index: u16,
+		name_and_ty_index: u16,
 	} = 18,
 }
 
-impl CpTag {
+impl IOCpTag {
 	pub fn read<B: BytesExt>(
 		buffer: &mut B,
-	) -> Result<CpTag, ClassfileIOError> {
+	) -> Result<IOCpTag, IOClassfileError> {
 		let tag = buffer.read_u8()?;
 		match tag {
 			1 => {
@@ -94,54 +82,56 @@ impl CpTag {
 					bytes.push(buffer.read_u8()?);
 				}
 
-				Ok(CpTag::Utf8 { length: len, bytes })
+				Ok(IOCpTag::Utf8 { length: len, bytes })
 			}
-			3 => Ok(CpTag::Integer {
+			3 => Ok(IOCpTag::Integer {
 				bytes: buffer.read_n_bytes::<4>()?,
 			}),
-			4 => Ok(CpTag::Float {
+			4 => Ok(IOCpTag::Float {
 				bytes: buffer.read_n_bytes::<4>()?,
 			}),
-			5 => Ok(CpTag::Long {
-				high_bytes: buffer.read_n_bytes::<4>()?,
-				low_bytes: buffer.read_n_bytes::<4>()?,
+			5 => Ok(IOCpTag::Long {
+				bytes: buffer.read_n_bytes::<8>()?,
+				// high_bytes: buffer.read_n_bytes::<4>()?,
+				// low_bytes: buffer.read_n_bytes::<4>()?,
 			}),
-			6 => Ok(CpTag::Double {
-				high_bytes: buffer.read_n_bytes::<4>()?,
-				low_bytes: buffer.read_n_bytes::<4>()?,
+			6 => Ok(IOCpTag::Double {
+				bytes: buffer.read_n_bytes::<8>()?,
+				// high_bytes: buffer.read_n_bytes::<4>()?,
+				// low_bytes: buffer.read_n_bytes::<4>()?,
 			}),
-			7 => Ok(CpTag::Class {
+			7 => Ok(IOCpTag::Class {
 				name_index: buffer.read_u16()?,
 			}),
-			8 => Ok(CpTag::String {
+			8 => Ok(IOCpTag::String {
 				utf8_index: buffer.read_u16()?,
 			}),
-			9 => Ok(CpTag::FieldRef {
+			9 => Ok(IOCpTag::FieldRef {
 				class_index: buffer.read_u16()?,
 				name_and_ty_index: buffer.read_u16()?,
 			}),
-			10 => Ok(CpTag::MethodRef {
+			10 => Ok(IOCpTag::MethodRef {
 				class_index: buffer.read_u16()?,
 				name_and_ty_index: buffer.read_u16()?,
 			}),
-			11 => Ok(CpTag::InterfaceMethodRef {
+			11 => Ok(IOCpTag::InterfaceMethodRef {
 				class_index: buffer.read_u16()?,
 				name_and_ty_index: buffer.read_u16()?,
 			}),
-			12 => Ok(CpTag::NameAndType {
+			12 => Ok(IOCpTag::NameAndType {
 				name_index: buffer.read_u16()?,
 				descriptor_index: buffer.read_u16()?,
 			}),
-			15 => Ok(CpTag::MethodHandle {
+			15 => Ok(IOCpTag::MethodHandle {
 				reference_kind: buffer.read_u8()?,
 				reference_index: buffer.read_u16()?,
 			}),
-			16 => Ok(CpTag::MethodType {
+			16 => Ok(IOCpTag::MethodType {
 				descriptor_index: buffer.read_u16()?,
 			}),
-			18 => Ok(CpTag::InvokeDynamic {
+			18 => Ok(IOCpTag::InvokeDynamic {
 				bootstrap_method_attr_index: buffer.read_u16()?,
-				name_and_type_index: buffer.read_u16()?,
+				name_and_ty_index: buffer.read_u16()?,
 			}),
 			_ => unimplemented!("unimplemented tag: {tag}"),
 		}
@@ -149,48 +139,50 @@ impl CpTag {
 
 	pub fn id(&self) -> u8 {
 		match self {
-			CpTag::Utf8 {
+			IOCpTag::Utf8 {
 				length: _,
 				bytes: _,
 			} => 1,
-			CpTag::Integer { bytes: _ } => 3,
-			CpTag::Float { bytes: _ } => 4,
-			CpTag::Long {
-				high_bytes: _,
-				low_bytes: _,
+			IOCpTag::Integer { bytes: _ } => 3,
+			IOCpTag::Float { bytes: _ } => 4,
+			IOCpTag::Long {
+				bytes: _,
+				// high_bytes: _,
+				// low_bytes: _,
 			} => 5,
-			CpTag::Double {
-				high_bytes: _,
-				low_bytes: _,
+			IOCpTag::Double {
+				bytes: _,
+				// high_bytes: _,
+				// low_bytes: _,
 			} => 6,
-			CpTag::Class { name_index: _ } => 7,
-			CpTag::String { utf8_index: _ } => 8,
-			CpTag::FieldRef {
+			IOCpTag::Class { name_index: _ } => 7,
+			IOCpTag::String { utf8_index: _ } => 8,
+			IOCpTag::FieldRef {
 				class_index: _,
 				name_and_ty_index: _,
 			} => 9,
-			CpTag::MethodRef {
+			IOCpTag::MethodRef {
 				class_index: _,
 				name_and_ty_index: _,
 			} => 10,
-			CpTag::InterfaceMethodRef {
+			IOCpTag::InterfaceMethodRef {
 				class_index: _,
 				name_and_ty_index: _,
 			} => 11,
-			CpTag::NameAndType {
+			IOCpTag::NameAndType {
 				name_index: _,
 				descriptor_index: _,
 			} => 12,
-			CpTag::MethodHandle {
+			IOCpTag::MethodHandle {
 				reference_kind: _,
 				reference_index: _,
 			} => 15,
-			CpTag::MethodType {
+			IOCpTag::MethodType {
 				descriptor_index: _,
 			} => 16,
-			CpTag::InvokeDynamic {
+			IOCpTag::InvokeDynamic {
 				bootstrap_method_attr_index: _,
-				name_and_type_index: _,
+				name_and_ty_index: _,
 			} => 18,
 		}
 	}
@@ -198,76 +190,80 @@ impl CpTag {
 	pub fn write<B: BytesExt>(
 		&self,
 		buffer: &mut B,
-	) -> Result<(), ClassfileIOError> {
+	) -> Result<(), IOClassfileError> {
 		buffer.write_u8(self.id())?;
 		match self {
-			CpTag::Utf8 { length, bytes } => {
+			IOCpTag::Utf8 { length, bytes } => {
 				buffer.write_u16(*length)?;
 				buffer.write_all(bytes)?;
 			}
-			CpTag::Integer { bytes } => buffer.write_all(bytes)?,
-			CpTag::Float { bytes } => buffer.write_all(bytes)?,
-			CpTag::Long {
-				high_bytes,
-				low_bytes,
+			IOCpTag::Integer { bytes } => buffer.write_all(bytes)?,
+			IOCpTag::Float { bytes } => buffer.write_all(bytes)?,
+			IOCpTag::Long {
+				bytes,
+				// high_bytes,
+				// low_bytes,
 			} => {
-				buffer.write_all(high_bytes)?;
-				buffer.write_all(low_bytes)?;
+				buffer.write_all(bytes)?;
+				// buffer.write_all(high_bytes)?;
+				// buffer.write_all(low_bytes)?;
 			}
-			CpTag::Double {
-				high_bytes,
-				low_bytes,
+			IOCpTag::Double {
+				bytes,
+				// high_bytes,
+				// low_bytes,
 			} => {
-				buffer.write_all(high_bytes)?;
-				buffer.write_all(low_bytes)?;
+				buffer.write_all(bytes)?;
+				// buffer.write_all(high_bytes)?;
+				// buffer.write_all(low_bytes)?;
 			}
-			CpTag::Class { name_index } => {
+			IOCpTag::Class { name_index } => {
 				buffer.write_u16(*name_index)?
 			}
-			CpTag::String { utf8_index } => {
+			IOCpTag::String { utf8_index } => {
 				buffer.write_u16(*utf8_index)?
 			}
-			CpTag::FieldRef {
+			IOCpTag::FieldRef {
 				class_index,
 				name_and_ty_index,
 			} => {
 				buffer.write_u16(*class_index)?;
 				buffer.write_u16(*name_and_ty_index)?;
 			}
-			CpTag::MethodRef {
+			IOCpTag::MethodRef {
 				class_index,
 				name_and_ty_index,
 			} => {
 				buffer.write_u16(*class_index)?;
 				buffer.write_u16(*name_and_ty_index)?;
 			}
-			CpTag::InterfaceMethodRef {
+			IOCpTag::InterfaceMethodRef {
 				class_index,
 				name_and_ty_index,
 			} => {
 				buffer.write_u16(*class_index)?;
 				buffer.write_u16(*name_and_ty_index)?;
 			}
-			CpTag::NameAndType {
+			IOCpTag::NameAndType {
 				name_index,
 				descriptor_index,
 			} => {
 				buffer.write_u16(*name_index)?;
 				buffer.write_u16(*descriptor_index)?;
 			}
-			CpTag::MethodHandle {
+			IOCpTag::MethodHandle {
 				reference_kind,
 				reference_index,
 			} => {
 				buffer.write_u8(*reference_kind)?;
 				buffer.write_u16(*reference_index)?;
 			}
-			CpTag::MethodType { descriptor_index } => {
+			IOCpTag::MethodType { descriptor_index } => {
 				buffer.write_u16(*descriptor_index)?;
 			}
-			CpTag::InvokeDynamic {
+			IOCpTag::InvokeDynamic {
 				bootstrap_method_attr_index,
-				name_and_type_index,
+				name_and_ty_index: name_and_type_index,
 			} => {
 				buffer.write_u16(*bootstrap_method_attr_index)?;
 				buffer.write_u16(*name_and_type_index)?;
@@ -275,16 +271,4 @@ impl CpTag {
 		}
 		Ok(())
 	}
-}
-
-pub struct AccessFlags;
-impl AccessFlags {
-	pub const ACC_PUBLIC: u16 = 0x001;
-	pub const ACC_FINAL: u16 = 0x010;
-	pub const ACC_SUPER: u16 = 0x020;
-	pub const ACC_INTERFACE: u16 = 0x0200;
-	pub const ACC_ABSTRACT: u16 = 0x0400;
-	pub const ACC_SYNTHETIC: u16 = 0x1000;
-	pub const ACC_ANNOTATION: u16 = 0x2000;
-	pub const ACC_ENUM: u16 = 0x4000;
 }
