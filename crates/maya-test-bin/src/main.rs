@@ -1,13 +1,7 @@
-use std::{
-	fs::File,
-	io::{Cursor, Read},
-	path::Path,
-};
+use std::{io::Cursor, path::Path};
 
 use maya_classfile_io::IOClassFile;
 use maya_classfile_ir::IRClassFile;
-
-const CLASS_BYTES: &[u8] = include_bytes!("../data/Hello.class");
 
 fn main() -> eyre::Result<()> {
 	let path = Path::new("crates/maya-test-bin/data");

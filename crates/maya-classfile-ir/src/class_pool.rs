@@ -158,7 +158,7 @@ pub struct CPMethodHandleRef {
 macro_rules! get_from_cp {
 	($cp:ident, $idx:expr, $ty:ident) => {{
 		match $cp.get($idx as usize - 1).expect("fuck") {
-			crate::class_pool::IRCpTag::$ty(v) => v,
+			IRCpTag::$ty(v) => v,
 			t => panic!("expected different type: {} | got: {t:?}", stringify!($ty)),
 		}
 		.clone()

@@ -1,7 +1,7 @@
 use std::io::Cursor;
 
 use maya_bytes::BytesReadExt;
-use maya_classfile_io::{class_pool::IOCpTag, IOAttributeInfo};
+use maya_classfile_io::IOAttributeInfo;
 
 use crate::class_pool::{CPClassRef, CPConstValueRef, CPNameAndTypeRef, CPUtf8Ref, IRClassfileError, IRCpTag};
 
