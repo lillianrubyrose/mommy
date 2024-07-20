@@ -3,7 +3,7 @@ use std::io::Cursor;
 use maya_bytes::BytesReadExt;
 use maya_classfile_io::{class_pool::IOCpTag, IOAttributeInfo};
 
-use crate::class_pool::{CPClassRef, CPNameAndTypeRef, CPUtf8Ref, IRClassfileError, IRCpTag};
+use crate::class_pool::{CPClassRef, CPConstValueRef, CPNameAndTypeRef, CPUtf8Ref, IRClassfileError, IRCpTag};
 
 #[derive(Debug, Clone)]
 pub enum ConstantValueAttribute {
@@ -324,12 +324,12 @@ impl MethodParametersParam {
 
 #[derive(Debug, Clone)]
 pub enum RuntimeAnnotationValue {
-	ConstValueIndex(u16),
+	ConstValueIndex(CPConstValueRef),
 	EnumConstValue {
-		type_name_index: u16,
-		const_name_index: u16,
+		type_name: CPUtf8Ref,
+		const_name: CPUtf8Ref,
 	},
-	ClassInfoIndex(u16),
+	ClassInfoIndex(CPUtf8Ref),
 	Annotation(Box<RuntimeAnnotation>),
 	ArrayValue {
 		values: Vec<RuntimeAnnotationValue>,
@@ -340,23 +340,17 @@ impl RuntimeAnnotationValue {
 	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
 		let tag = buffer.read_u8()?;
 		Ok(match tag {
-			b'B' => Self::ConstValueIndex(buffer.read_u16()?),
-			b'C' => Self::ConstValueIndex(buffer.read_u16()?),
-			b'D' => Self::ConstValueIndex(buffer.read_u16()?),
-			b'F' => Self::ConstValueIndex(buffer.read_u16()?),
-			b'I' => Self::ConstValueIndex(buffer.read_u16()?),
-			b'J' => Self::ConstValueIndex(buffer.read_u16()?),
-			b'S' => Self::ConstValueIndex(buffer.read_u16()?),
-			b'Z' => Self::ConstValueIndex(buffer.read_u16()?),
-			b's' => Self::ConstValueIndex(buffer.read_u16()?),
+			b'B' | b'C' | b'D' | b'F' | b'I' | b'J' | b'S' | b'Z' | b's' => {
+				Self::ConstValueIndex(CPConstValueRef::from_cp(cp, buffer.read_u16()?))
+			}
 
 			b'e' => Self::EnumConstValue {
-				type_name_index: buffer.read_u16()?,
-				const_name_index: buffer.read_u16()?,
+				type_name: CPUtf8Ref::from_cp(cp, buffer.read_u16()?),
+				const_name: CPUtf8Ref::from_cp(cp, buffer.read_u16()?),
 			},
 
-			b'c' => Self::ClassInfoIndex(buffer.read_u16()?),
-			b'@' => todo!("Annotation"),
+			b'c' => Self::ClassInfoIndex(CPUtf8Ref::from_cp(cp, buffer.read_u16()?)),
+			b'@' => Self::Annotation(Box::new(RuntimeAnnotation::new(cp, buffer)?)),
 			b'[' => {
 				let n_values = buffer.read_u16()? as usize;
 				let mut values = Vec::with_capacity(n_values);

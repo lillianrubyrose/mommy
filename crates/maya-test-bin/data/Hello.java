@@ -9,6 +9,7 @@ public final class Hello {
       System.out.println(MESSAGE);
    }
 
+   @HelloAnnoRec(value = @HelloAnno(value = "Hi"))
    public static void stackmapper(int value) {
         int i = 0;
         int j = 0;
@@ -31,6 +32,10 @@ public final class Hello {
 
    public @interface HelloAnno {
       String value();
+   }
+
+   public @interface HelloAnnoRec {
+      HelloAnno value();
    }
 
    @Deprecated

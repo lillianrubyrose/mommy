@@ -46,6 +46,54 @@ impl IRMethodRefKind {
 }
 
 #[derive(Debug, Clone)]
+pub enum CPConstValueRefKind {
+	Double(f64),
+	Float(f32),
+	Int(i32),
+	Long(i64),
+	String(Rc<String>),
+}
+
+#[derive(Debug, Clone)]
+pub struct CPConstValueRef {
+	pub index: u16,
+	pub kind: CPConstValueRefKind,
+}
+
+impl CPConstValueRef {
+	pub fn new(index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::Double(data) => Self {
+				kind: CPConstValueRefKind::Double(*data),
+				index,
+			},
+			IRCpTag::Float(data) => Self {
+				kind: CPConstValueRefKind::Float(*data),
+				index,
+			},
+			IRCpTag::Integer(data) => Self {
+				kind: CPConstValueRefKind::Int(*data),
+				index,
+			},
+			IRCpTag::Long(data) => Self {
+				kind: CPConstValueRefKind::Long(*data),
+				index,
+			},
+			IRCpTag::Utf8(data) => Self {
+				kind: CPConstValueRefKind::String(data.clone()),
+				index,
+			},
+			_ => panic!("trying to make CPConstValueRef from non-const tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(index, tag)
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct CPUtf8Ref {
 	pub data: Rc<String>,
 	pub index: u16,
@@ -60,6 +108,11 @@ impl CPUtf8Ref {
 			},
 			_ => panic!("trying to make CPUtf8Ref from non-utf8 tag. {utf8_tag:?}"),
 		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(index, tag)
 	}
 }
 
@@ -78,6 +131,11 @@ impl CPClassRef {
 			},
 			_ => panic!("trying to make CPUtf8Ref from non-utf8 tag. {utf8_tag:?}"),
 		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(index, tag)
 	}
 }
 
