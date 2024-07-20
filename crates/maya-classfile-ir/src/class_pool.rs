@@ -149,9 +149,49 @@ pub struct CPNameAndTypeRef {
 // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.8
 #[derive(Debug, Clone)]
 pub struct CPMethodHandleRef {
-	pub kind: IRMethodRefKind,
+	pub ref_kind: IRMethodRefKind,
 	pub ref_tag: Box<IRCpTag>,
 	pub ref_index: u16,
+	pub index: u16,
+}
+
+impl CPMethodHandleRef {
+	pub fn new(index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::MethodHandle {
+				ref_kind,
+				ref_index,
+				ref_tag,
+			} => Self {
+				ref_kind: ref_kind.clone(),
+				ref_tag: ref_tag.clone(),
+				ref_index: *ref_index,
+				index,
+			},
+			_ => panic!("trying to make CPMethodHandleRef from non-MethodHandle tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(index, tag)
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct CPTagRef {
+	pub tag: IRCpTag,
+	pub index: u16,
+}
+
+impl CPTagRef {
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self {
+			tag: tag.clone(),
+			index,
+		}
+	}
 }
 
 #[macro_export]
@@ -192,7 +232,11 @@ pub enum IRCpTag {
 		descriptor: CPUtf8Ref,
 	} = 12,
 	// https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.8
-	MethodHandle(CPMethodHandleRef) = 15,
+	MethodHandle {
+		ref_kind: IRMethodRefKind,
+		ref_index: u16,
+		ref_tag: Box<IRCpTag>,
+	} = 15,
 	// https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.9
 	MethodType(CPUtf8Ref) = 16,
 	// https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.10
@@ -303,11 +347,11 @@ impl IRCpTag {
 			} => {
 				let kind = IRMethodRefKind::from(*reference_kind_idx);
 				let tag = parse_tag_idx!(reference_index, raw_tags, formed_tags).expect("expected tag");
-				IRCpTag::MethodHandle(CPMethodHandleRef {
-					kind,
+				IRCpTag::MethodHandle {
+					ref_kind: kind,
 					ref_tag: Box::new(tag.clone()),
 					ref_index: *reference_index,
-				})
+				}
 			}
 			IOCpTag::MethodType { descriptor_index } => {
 				let tag = parse_tag_idx!(descriptor_index, raw_tags, formed_tags).expect("expected utf8 tag");

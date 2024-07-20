@@ -50,4 +50,6 @@ public final class Hello {
          System.out.println(value);
       }
    }
+
+   public record Cat(String name, int age) {};
 }

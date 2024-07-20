@@ -3,7 +3,9 @@ use std::io::Cursor;
 use maya_bytes::BytesReadExt;
 use maya_classfile_io::IOAttributeInfo;
 
-use crate::class_pool::{CPClassRef, CPConstValueRef, CPNameAndTypeRef, CPUtf8Ref, IRClassfileError, IRCpTag};
+use crate::class_pool::{
+	CPClassRef, CPConstValueRef, CPMethodHandleRef, CPNameAndTypeRef, CPTagRef, CPUtf8Ref, IRClassfileError, IRCpTag,
+};
 
 #[derive(Debug, Clone)]
 pub enum ConstantValueAttribute {
@@ -401,6 +403,54 @@ impl RuntimeAnnotation {
 }
 
 #[derive(Debug, Clone)]
+pub struct RecordComponentInfo {
+	pub name: CPUtf8Ref,
+	pub descriptor: CPUtf8Ref,
+	pub attributes: Vec<IRAttributeInfo>,
+}
+
+impl RecordComponentInfo {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let name_idx = buffer.read_u16()?;
+		let descriptor_idx = buffer.read_u16()?;
+		let n_attributes = buffer.read_u16()? as usize;
+		let mut attributes = Vec::with_capacity(n_attributes);
+		for _ in 0..n_attributes {
+			attributes.push(IRAttributeInfo::from_io(cp, IOAttributeInfo::read(buffer)?)?);
+		}
+
+		Ok(Self {
+			name: CPUtf8Ref::from_cp(cp, name_idx),
+			descriptor: CPUtf8Ref::from_cp(cp, descriptor_idx),
+			attributes,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct BootstrapMethodsMethod {
+	pub method: CPMethodHandleRef,
+	pub arguments: Vec<CPTagRef>,
+}
+
+impl BootstrapMethodsMethod {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let method_idx = buffer.read_u16()?;
+		let n_args = buffer.read_u16()? as usize;
+		let mut arguments = Vec::with_capacity(n_args);
+
+		for _ in 0..n_args {
+			arguments.push(buffer.read_u16()?);
+		}
+
+		Ok(Self {
+			method: CPMethodHandleRef::from_cp(cp, method_idx),
+			arguments: arguments.into_iter().map(|idx| CPTagRef::from_cp(cp, idx)).collect(),
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct IRAttributeInfo {
 	pub name: CPUtf8Ref,
 	pub length: u32,
@@ -459,13 +509,18 @@ pub enum IRAttribute {
 		params: Vec<Vec<RuntimeAnnotation>>,
 	},
 	AnnotationDefault,
-	BootstrapMethods,
+	BootstrapMethods {
+		methods: Vec<BootstrapMethodsMethod>,
+	},
 	NestMembers {
 		classes: Vec<CPClassRef>,
 	},
 	NestHost(CPClassRef),
 	MethodParameters {
 		parameters: Vec<MethodParametersParam>,
+	},
+	Record {
+		components: Vec<RecordComponentInfo>,
 	},
 }
 
@@ -619,6 +674,26 @@ impl IRAttribute {
 
 				Self::RuntimeInvisibleParameterAnnotations { params }
 			}
+			"Record" => {
+				let n_components = data.read_u16()? as usize;
+				let mut components = Vec::with_capacity(n_components);
+
+				for _ in 0..n_components {
+					components.push(RecordComponentInfo::new(cp, data)?);
+				}
+
+				Self::Record { components }
+			}
+			"BootstrapMethods" => {
+				let n_methods = data.read_u16()? as usize;
+				let mut methods = Vec::with_capacity(n_methods);
+
+				for _ in 0..n_methods {
+					methods.push(BootstrapMethodsMethod::new(cp, data)?);
+				}
+
+				Self::BootstrapMethods { methods }
+			}
 
 			n => panic!("unparsed attribute: {n}"),
 		})
@@ -650,10 +725,11 @@ impl IRAttribute {
 			Self::RuntimeVisibleParameterAnnotations { params: _ } => "RuntimeVisibleParameterAnnotations",
 			Self::RuntimeInvisibleParameterAnnotations { params: _ } => "RuntimeInvisibleParameterAnnotations",
 			Self::AnnotationDefault => "AnnotationDefault",
-			Self::BootstrapMethods => "BootstrapMethods",
+			Self::BootstrapMethods { methods: _ } => "BootstrapMethods",
 			Self::NestMembers { classes: _ } => "NestMembers",
 			Self::NestHost(_) => "NestHost",
 			Self::MethodParameters { parameters: _ } => "MethodParameters",
+			Self::Record { components: _ } => "Record",
 		}
 	}
 }
