@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use attribute::IRAttributeInfo;
-use class_pool::{CPUtf8Ref, IRClassfileError, IRCpTag};
+use class_pool::{CPClassRef, CPUtf8Ref, IRClassfileError, IRCpTag};
 use maya_classfile_io::{IOClassFile, IOFieldInfo, IOMethodInfo};
 
 pub mod attribute;
@@ -40,6 +40,7 @@ impl AccessFlags {
 	pub const SYNTHETIC: u16 = 0x1000;
 	pub const ANNOTATION: u16 = 0x2000;
 	pub const ENUM: u16 = 0x4000;
+	pub const MODULE: u16 = 0x8000;
 }
 
 #[derive(Debug)]
@@ -114,9 +115,9 @@ pub struct IRClassFile {
 	pub version: ClassFileVersion,
 	pub cp: Vec<IRCpTag>,
 	pub access_flags: u16,
-	pub this_class: CPUtf8Ref,
-	pub super_class: CPUtf8Ref,
-	pub interfaces: Vec<CPUtf8Ref>,
+	pub this_class: CPClassRef,
+	pub super_class: CPClassRef,
+	pub interfaces: Vec<CPClassRef>,
 	pub fields: Vec<IRFieldInfo>,
 	pub methods: Vec<IRMethodInfo>,
 	pub attributes: Vec<IRAttributeInfo>,
@@ -131,13 +132,13 @@ impl IRClassFile {
 		};
 		let cp = IRCpTag::from_io(raw.cp).unwrap();
 		let access_flags = raw.access_flags;
-		let this_class = CPUtf8Ref::new(raw.this_class, cp.get(raw.this_class as usize - 1).unwrap());
-		let super_class = CPUtf8Ref::new(raw.super_class, cp.get(raw.super_class as usize - 1).unwrap());
+		let this_class = CPClassRef::new(raw.this_class, cp.get(raw.this_class as usize - 1).unwrap());
+		let super_class = CPClassRef::new(raw.super_class, cp.get(raw.super_class as usize - 1).unwrap());
 		let interfaces = raw
 			.interfaces
 			.iter()
 			.copied()
-			.map(|idx| CPUtf8Ref::new(idx, cp.get(idx as usize - 1).unwrap()))
+			.map(|idx| CPClassRef::new(idx, cp.get(idx as usize - 1).unwrap()))
 			.collect();
 		let fields = raw
 			.fields

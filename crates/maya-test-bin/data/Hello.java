@@ -3,6 +3,7 @@ import java.lang.Deprecated;
 import java.lang.RuntimeException;
 
 public final class Hello {
+   @Deprecated
    public static final String MESSAGE = "Hello World!";
    public static void main(String[] args) {
       System.out.println(MESSAGE);
@@ -20,10 +21,16 @@ public final class Hello {
             int t = 0;
         }
    }
+
+   @HelloAnno(value = "Meow")
    public void thrower() throws RuntimeException {}
 
    public interface HelloInterface {
-      void print(String value);
+      void print(@HelloAnno(value = "Meow") String value);
+   }
+
+   public @interface HelloAnno {
+      String value();
    }
 
    @Deprecated

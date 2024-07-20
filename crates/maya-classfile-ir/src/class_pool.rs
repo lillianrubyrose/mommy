@@ -54,10 +54,6 @@ pub struct CPUtf8Ref {
 impl CPUtf8Ref {
 	pub fn new(index: u16, utf8_tag: &IRCpTag) -> Self {
 		match utf8_tag {
-			IRCpTag::Class(this) => Self {
-				data: this.data.clone(),
-				index,
-			},
 			IRCpTag::Utf8(data) => Self {
 				data: data.clone(),
 				index,
