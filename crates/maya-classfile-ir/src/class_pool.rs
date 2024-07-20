@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{rc::Rc, string::FromUtf8Error};
 
 use maya_bytes::BytesError;
 use maya_classfile_io::class_pool::IOCpTag;
@@ -11,6 +11,8 @@ pub enum IRClassfileError {
 	Mutf8(#[from] MUTFError),
 	#[error("{0}")]
 	Bytes(#[from] BytesError),
+	#[error("{0}")]
+	Utf8(#[from] FromUtf8Error),
 }
 
 // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-5.html#jvms-5.4.3.5
@@ -144,6 +146,24 @@ pub struct CPNameAndTypeRef {
 	pub index: u16,
 	pub name: CPUtf8Ref,
 	pub ty: CPUtf8Ref,
+}
+
+impl CPNameAndTypeRef {
+	pub fn new(index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::NameAndType { name, descriptor } => Self {
+				name: name.clone(),
+				ty: descriptor.clone(),
+				index,
+			},
+			_ => panic!("trying to make CPNameAndTypeRef from non-NameAndType tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(index, tag)
+	}
 }
 
 // https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.4.8

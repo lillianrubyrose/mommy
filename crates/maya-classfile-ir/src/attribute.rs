@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::{io::Cursor, rc::Rc};
 
 use maya_bytes::BytesReadExt;
 use maya_classfile_io::IOAttributeInfo;
@@ -451,6 +451,60 @@ impl BootstrapMethodsMethod {
 }
 
 #[derive(Debug, Clone)]
+pub struct LocalVariableTableEntry {
+	pub start_pc: u16,
+	pub length: u16,
+	pub name: CPUtf8Ref,
+	pub descriptor: CPUtf8Ref,
+	pub index: u16,
+}
+
+impl LocalVariableTableEntry {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let start_pc = buffer.read_u16()?;
+		let length = buffer.read_u16()?;
+		let name_idx = buffer.read_u16()?;
+		let descriptor_idx = buffer.read_u16()?;
+		let index = buffer.read_u16()?;
+
+		Ok(Self {
+			start_pc,
+			length,
+			name: CPUtf8Ref::from_cp(cp, name_idx),
+			descriptor: CPUtf8Ref::from_cp(cp, descriptor_idx),
+			index,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct LocalVariableTypeTableEntry {
+	pub start_pc: u16,
+	pub length: u16,
+	pub name: CPUtf8Ref,
+	pub signature: CPUtf8Ref,
+	pub index: u16,
+}
+
+impl LocalVariableTypeTableEntry {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let start_pc = buffer.read_u16()?;
+		let length = buffer.read_u16()?;
+		let name_idx = buffer.read_u16()?;
+		let signature_idx = buffer.read_u16()?;
+		let index = buffer.read_u16()?;
+
+		Ok(Self {
+			start_pc,
+			length,
+			name: CPUtf8Ref::from_cp(cp, name_idx),
+			signature: CPUtf8Ref::from_cp(cp, signature_idx),
+			index,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct IRAttributeInfo {
 	pub name: CPUtf8Ref,
 	pub length: u32,
@@ -483,18 +537,20 @@ pub enum IRAttribute {
 	},
 	InnerClasses(InnerClassesAttribute),
 	EnclosingMethod {
-		class_idx: u16,
+		class: CPClassRef,
 		method: CPNameAndTypeRef,
 	},
 	Synthetic,
 	Signature(CPUtf8Ref),
 	SourceFile(CPUtf8Ref),
-	SourceDebugExtension(
-		/*TODO: What to put here? Maybe just a String? https://docs.oracle.com/javase/specs/jvms/se7/html/jvms-4.html#jvms-4.7.11 */
-	),
+	SourceDebugExtension(Rc<String>),
 	LineNumberTable(LineNumberTableAttribute),
-	LocalVariableTable,
-	LocalVariableTypeTable,
+	LocalVariableTable {
+		table: Vec<LocalVariableTableEntry>,
+	},
+	LocalVariableTypeTable {
+		table: Vec<LocalVariableTypeTableEntry>,
+	},
 	Deprecated,
 	RuntimeVisibleAnnotations {
 		annotations: Vec<RuntimeAnnotation>,
@@ -521,6 +577,9 @@ pub enum IRAttribute {
 	},
 	Record {
 		components: Vec<RecordComponentInfo>,
+	},
+	PermittedSubclasses {
+		classes: Vec<CPClassRef>,
 	},
 }
 
@@ -694,6 +753,41 @@ impl IRAttribute {
 
 				Self::BootstrapMethods { methods }
 			}
+			"PermittedSubclasses" => {
+				let n_classes = data.read_u16()? as usize;
+				let mut classes = Vec::with_capacity(n_classes);
+
+				for _ in 0..n_classes {
+					classes.push(CPClassRef::from_cp(cp, data.read_u16()?));
+				}
+
+				Self::PermittedSubclasses { classes }
+			}
+			"SourceDebugExtension" => Self::SourceDebugExtension(Rc::new(String::from_utf8(data.read_to_vec()?)?)),
+			"LocalVariableTable" => {
+				let n_entries = data.read_u16()? as usize;
+				let mut table = Vec::with_capacity(n_entries);
+
+				for _ in 0..n_entries {
+					table.push(LocalVariableTableEntry::new(cp, data)?);
+				}
+
+				Self::LocalVariableTable { table }
+			}
+			"LocalVariableTypeTable" => {
+				let n_entries = data.read_u16()? as usize;
+				let mut table = Vec::with_capacity(n_entries);
+
+				for _ in 0..n_entries {
+					table.push(LocalVariableTypeTableEntry::new(cp, data)?);
+				}
+
+				Self::LocalVariableTypeTable { table }
+			}
+			"EnclosingMethod" => Self::EnclosingMethod {
+				class: CPClassRef::from_cp(cp, data.read_u16()?),
+				method: CPNameAndTypeRef::from_cp(cp, data.read_u16()?),
+			},
 
 			n => panic!("unparsed attribute: {n}"),
 		})
@@ -708,17 +802,14 @@ impl IRAttribute {
 				exception_index_table: _,
 			} => "Exceptions",
 			Self::InnerClasses(_) => "InnerClasses",
-			Self::EnclosingMethod {
-				class_idx: _,
-				method: _,
-			} => "EnclosingMethod",
+			Self::EnclosingMethod { class: _, method: _ } => "EnclosingMethod",
 			Self::Synthetic => "Synthetic",
 			Self::Signature(_) => "Signature",
 			Self::SourceFile(_) => "SourceFile",
-			Self::SourceDebugExtension() => "SourceDebugExtension",
+			Self::SourceDebugExtension(_) => "SourceDebugExtension",
 			Self::LineNumberTable(_) => "LineNumberTable",
-			Self::LocalVariableTable => "LocalVariableTable",
-			Self::LocalVariableTypeTable => "LocalVariableTypeTable",
+			Self::LocalVariableTable { table: _ } => "LocalVariableTable",
+			Self::LocalVariableTypeTable { table: _ } => "LocalVariableTypeTable",
 			Self::Deprecated => "Deprecated",
 			Self::RuntimeVisibleAnnotations { annotations: _ } => "RuntimeVisibleAnnotations",
 			Self::RuntimeInvisibleAnnotations { annotations: _ } => "RuntimeInvisibleAnnotations",
@@ -730,6 +821,7 @@ impl IRAttribute {
 			Self::NestHost(_) => "NestHost",
 			Self::MethodParameters { parameters: _ } => "MethodParameters",
 			Self::Record { components: _ } => "Record",
+			Self::PermittedSubclasses { classes: _ } => "PermittedSubclasses",
 		}
 	}
 }

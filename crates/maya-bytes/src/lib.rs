@@ -36,6 +36,12 @@ pub trait BytesReadExt: Read + Seek {
 		Ok(())
 	}
 
+	fn read_to_vec(&mut self) -> Result<Vec<u8>, BytesError> {
+		let len = self.stream_len()? as usize;
+		let pos = self.stream_position()? as usize;
+		self.read_n_bytes_vec(len - pos - 1)
+	}
+
 	fn read_n_bytes<const N: usize>(&mut self) -> Result<[u8; N], BytesError> {
 		self.len_check(N as u64)?;
 

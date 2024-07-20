@@ -1,6 +1,7 @@
 import java.lang.System;
 import java.lang.Deprecated;
 import java.lang.RuntimeException;
+import java.util.function.Supplier;
 
 public final class Hello {
    @Deprecated
@@ -10,17 +11,24 @@ public final class Hello {
    }
 
    @HelloAnnoRec(value = @HelloAnno(value = "Hi"))
-   public static void stackmapper(int value) {
-        int i = 0;
-        int j = 0;
-        if (i > 0) {
-            long k = 0;
-            if (j == 0) {
-                k++;
-                int s=1111;
-            }
-            int t = 0;
-        }
+   public static <T> void stackmapper(int value, T ty) {
+      int i = 0;
+      int j = 0;
+      T ty2 = ty;
+      if (i > 0) {
+         long k = 0;
+         if (j == 0) {
+            k++;
+            int s=1111;
+         }
+         String t = "fucker";
+      }
+      Supplier<String> sup = () -> {
+         return "fuck";
+      };
+      HelloInterface h = new HelloInterface() {
+         @Override public void print(String value) {}
+      };
    }
 
    @HelloAnno(value = "Meow")
@@ -50,6 +58,9 @@ public final class Hello {
          System.out.println(value);
       }
    }
+
+   public sealed class Shape permits Circle {}
+   public final class Circle extends Shape {}
 
    public record Cat(String name, int age) {};
 }
