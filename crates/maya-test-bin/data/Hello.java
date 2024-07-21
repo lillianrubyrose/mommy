@@ -2,6 +2,12 @@ import java.lang.System;
 import java.lang.Deprecated;
 import java.lang.RuntimeException;
 import java.util.function.Supplier;
+import java.util.Map;
+import java.util.HashMap;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.lang.annotation.ElementType;
 
 public final class Hello {
    @Deprecated
@@ -38,16 +44,26 @@ public final class Hello {
       void print(@HelloAnno(value = "Meow") String value);
    }
 
+   @Target({ElementType.PARAMETER, ElementType.FIELD, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE, ElementType.METHOD, ElementType.TYPE_PARAMETER, ElementType.TYPE, ElementType.TYPE_USE, ElementType.ANNOTATION_TYPE})
    public @interface HelloAnno {
       String value();
    }
 
+   @Retention(value = RetentionPolicy.RUNTIME)
+   @Target({ElementType.PARAMETER, ElementType.FIELD, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE, ElementType.METHOD, ElementType.TYPE_PARAMETER, ElementType.TYPE, ElementType.TYPE_USE, ElementType.ANNOTATION_TYPE})
    public @interface HelloAnnoRec {
       HelloAnno value();
    }
 
+   @Target({ElementType.PARAMETER, ElementType.FIELD, ElementType.LOCAL_VARIABLE, ElementType.PACKAGE, ElementType.METHOD, ElementType.TYPE_PARAMETER, ElementType.TYPE, ElementType.TYPE_USE, ElementType.ANNOTATION_TYPE})
+   public @interface Meow {}
+
+   public interface GenericAnnot<@Meow T> {}
+
    @Deprecated
-   public class InnerHello implements HelloInterface {
+   public class InnerHello<T> implements HelloInterface {
+      public final Map<@HelloAnnoRec(value = @HelloAnno(value = "mew")) String, Map<Integer, @Meow T>> map = new HashMap<>();
+
       public int intMethod() { return -1; }
       public void intMethod(int value) {}
       public String stringMethod() { return "meow"; }

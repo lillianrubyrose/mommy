@@ -505,6 +505,150 @@ impl LocalVariableTypeTableEntry {
 }
 
 #[derive(Debug, Clone)]
+pub struct RuntimeTypeAnnotationLocalVarTargetTableEntry {
+	pub start_pc: u16,
+	pub length: u16,
+	pub index: u16,
+}
+
+#[derive(Debug, Clone)]
+pub enum RuntimeTypeAnnotationTargetInfo {
+	TypeParameterTarget {
+		type_param_index: u8,
+	},
+	SupertypeTarget {
+		supertype_index: u16,
+	},
+	TypeParameterBoundTarget {
+		type_param_index: u8,
+		bound_index: u8,
+	},
+	EmptyTarget,
+	FormalParameterTarget {
+		formal_param_index: u8,
+	},
+	ThrowsTarget {
+		throws_type_index: u16,
+	},
+	LocalvarTarget {
+		table: Vec<RuntimeTypeAnnotationLocalVarTargetTableEntry>,
+	},
+	CatchTarget {
+		exception_table_index: u16,
+	},
+	OffsetTarget {
+		offset: u16,
+	},
+	TypeArgumentTarget {
+		offset: u16,
+		type_argument_index: u8,
+	},
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeTypeAnnotationTypePathPart {
+	// TODO: Parse this into Enum of some sort? Maybe.
+	// see: https://docs.oracle.com/javase/specs/jvms/se22/html/jvms-4.html#jvms-4.7.20
+	pub type_path_kind: u8,
+	pub type_argument_kind: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeTypeAnnotation {
+	pub target_type: u8,
+	pub target_info: RuntimeTypeAnnotationTargetInfo,
+	pub target_path: Vec<RuntimeTypeAnnotationTypePathPart>,
+	pub type_index: u16,
+	pub pairs: Vec<RuntimeAnnotationEVPair>,
+}
+
+impl RuntimeTypeAnnotation {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let target_type = buffer.read_u8()?;
+		let target_info = match target_type {
+			// 4.7.20-A
+			0x0 | 0x01 => RuntimeTypeAnnotationTargetInfo::TypeParameterTarget {
+				type_param_index: buffer.read_u8()?,
+			},
+			0x10 => RuntimeTypeAnnotationTargetInfo::SupertypeTarget {
+				supertype_index: buffer.read_u16()?,
+			},
+			0x11 | 0x12 => RuntimeTypeAnnotationTargetInfo::TypeParameterBoundTarget {
+				type_param_index: buffer.read_u8()?,
+				bound_index: buffer.read_u8()?,
+			},
+			0x13..=0x15 => RuntimeTypeAnnotationTargetInfo::EmptyTarget,
+			0x16 => RuntimeTypeAnnotationTargetInfo::FormalParameterTarget {
+				formal_param_index: buffer.read_u8()?,
+			},
+			0x17 => RuntimeTypeAnnotationTargetInfo::ThrowsTarget {
+				throws_type_index: buffer.read_u16()?,
+			},
+
+			// 4.7.20-B
+			0x40 | 0x41 => {
+				let n_entries = buffer.read_u16()? as usize;
+				let mut table = Vec::with_capacity(n_entries);
+
+				for _ in 0..n_entries {
+					table.push(RuntimeTypeAnnotationLocalVarTargetTableEntry {
+						start_pc: buffer.read_u16()?,
+						length: buffer.read_u16()?,
+						index: buffer.read_u16()?,
+					});
+				}
+
+				RuntimeTypeAnnotationTargetInfo::LocalvarTarget { table }
+			}
+			0x42 => RuntimeTypeAnnotationTargetInfo::CatchTarget {
+				exception_table_index: buffer.read_u16()?,
+			},
+			0x43..=0x45 => RuntimeTypeAnnotationTargetInfo::OffsetTarget {
+				offset: buffer.read_u16()?,
+			},
+			0x47..=0x4B => RuntimeTypeAnnotationTargetInfo::TypeArgumentTarget {
+				offset: buffer.read_u16()?,
+				type_argument_index: buffer.read_u8()?,
+			},
+
+			_ => panic!("unexpected target_type: {target_type}"),
+		};
+
+		let n_parts = buffer.read_u8()? as usize;
+		let mut target_path = Vec::with_capacity(n_parts);
+		for _ in 0..n_parts {
+			target_path.push(RuntimeTypeAnnotationTypePathPart {
+				type_path_kind: buffer.read_u8()?,
+				type_argument_kind: buffer.read_u8()?,
+			});
+		}
+
+		let type_index = buffer.read_u16()?;
+
+		let n_pairs = buffer.read_u16()? as usize;
+		let mut pairs = Vec::with_capacity(n_pairs);
+
+		for _ in 0..n_pairs {
+			let name_idx = buffer.read_u16()?;
+			let name = CPUtf8Ref::new(name_idx, cp.get(name_idx as usize - 1).expect("expected utf8"));
+
+			pairs.push(RuntimeAnnotationEVPair {
+				name,
+				value: RuntimeAnnotationValue::new(cp, buffer)?,
+			});
+		}
+
+		Ok(Self {
+			target_type,
+			target_info,
+			target_path,
+			type_index,
+			pairs,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct IRAttributeInfo {
 	pub name: CPUtf8Ref,
 	pub length: u32,
@@ -580,6 +724,12 @@ pub enum IRAttribute {
 	},
 	PermittedSubclasses {
 		classes: Vec<CPClassRef>,
+	},
+	RuntimeVisibleTypeAnnotations {
+		annotations: Vec<RuntimeTypeAnnotation>,
+	},
+	RuntimeInvisibleTypeAnnotations {
+		annotations: Vec<RuntimeTypeAnnotation>,
 	},
 }
 
@@ -788,6 +938,26 @@ impl IRAttribute {
 				class: CPClassRef::from_cp(cp, data.read_u16()?),
 				method: CPNameAndTypeRef::from_cp(cp, data.read_u16()?),
 			},
+			"RuntimeVisibleTypeAnnotations" => {
+				let n_annotations = data.read_u16()? as usize;
+				let mut annotations = Vec::with_capacity(n_annotations);
+
+				for _ in 0..n_annotations {
+					annotations.push(RuntimeTypeAnnotation::new(cp, data)?);
+				}
+
+				Self::RuntimeVisibleTypeAnnotations { annotations }
+			}
+			"RuntimeInvisibleTypeAnnotations" => {
+				let n_annotations = data.read_u16()? as usize;
+				let mut annotations = Vec::with_capacity(n_annotations);
+
+				for _ in 0..n_annotations {
+					annotations.push(RuntimeTypeAnnotation::new(cp, data)?);
+				}
+
+				Self::RuntimeInvisibleTypeAnnotations { annotations }
+			}
 
 			n => panic!("unparsed attribute: {n}"),
 		})
@@ -822,6 +992,8 @@ impl IRAttribute {
 			Self::MethodParameters { parameters: _ } => "MethodParameters",
 			Self::Record { components: _ } => "Record",
 			Self::PermittedSubclasses { classes: _ } => "PermittedSubclasses",
+			Self::RuntimeVisibleTypeAnnotations { annotations: _ } => "RuntimeVisibleTypeAnnotations",
+			Self::RuntimeInvisibleTypeAnnotations { annotations: _ } => "RuntimeInvisibleTypeAnnotations",
 		}
 	}
 }
