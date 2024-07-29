@@ -708,7 +708,9 @@ pub enum IRAttribute {
 	RuntimeInvisibleParameterAnnotations {
 		params: Vec<Vec<RuntimeAnnotation>>,
 	},
-	AnnotationDefault,
+	AnnotationDefault {
+		default_value: RuntimeAnnotationValue,
+	},
 	BootstrapMethods {
 		methods: Vec<BootstrapMethodsMethod>,
 	},
@@ -735,7 +737,6 @@ pub enum IRAttribute {
 
 impl IRAttribute {
 	pub fn new<B: BytesReadExt>(name: CPUtf8Ref, cp: &[IRCpTag], data: &mut B) -> Result<Self, IRClassfileError> {
-		println!("parsing attr {:?}", name.data.as_str());
 		Ok(match name.data.as_str() {
 			"ConstantValue" => {
 				let cp_idx = data.read_u16()?;
@@ -958,6 +959,9 @@ impl IRAttribute {
 
 				Self::RuntimeInvisibleTypeAnnotations { annotations }
 			}
+			"AnnotationDefault" => Self::AnnotationDefault {
+				default_value: RuntimeAnnotationValue::new(cp, data)?,
+			},
 
 			n => panic!("unparsed attribute: {n}"),
 		})
@@ -985,7 +989,7 @@ impl IRAttribute {
 			Self::RuntimeInvisibleAnnotations { annotations: _ } => "RuntimeInvisibleAnnotations",
 			Self::RuntimeVisibleParameterAnnotations { params: _ } => "RuntimeVisibleParameterAnnotations",
 			Self::RuntimeInvisibleParameterAnnotations { params: _ } => "RuntimeInvisibleParameterAnnotations",
-			Self::AnnotationDefault => "AnnotationDefault",
+			Self::AnnotationDefault { default_value: _ } => "AnnotationDefault",
 			Self::BootstrapMethods { methods: _ } => "BootstrapMethods",
 			Self::NestMembers { classes: _ } => "NestMembers",
 			Self::NestHost(_) => "NestHost",

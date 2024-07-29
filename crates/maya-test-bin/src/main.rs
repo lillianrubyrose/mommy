@@ -14,7 +14,7 @@ fn main() -> eyre::Result<()> {
 
 			println!("Parsing: {name:?}");
 			let cf = IOClassFile::read(&mut buffer)?;
-			let cf = IRClassFile::from_io(cf);
+			let cf = IRClassFile::from_io(cf)?;
 			println!("Parsed: {name:?}");
 			println!("{:#?}", cf);
 		}
