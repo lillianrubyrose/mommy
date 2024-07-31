@@ -1,9 +1,40 @@
 use std::{io::Cursor, path::Path};
 
 use maya_classfile_io::IOClassFile;
-use maya_classfile_ir::IRClassFile;
+use maya_classfile_ir::{
+	attribute::{IRAttribute, IRAttributeInfo},
+	code::Instructions,
+	IRClassFile,
+};
 
 fn main() -> eyre::Result<()> {
+	// let simple = include_bytes!("../data/out/a/a/Simple.class");
+	// let mut buffer = Cursor::new(simple);
+	// let cf = IOClassFile::read(&mut buffer).unwrap();
+	// let cf = IRClassFile::from_io(cf).unwrap();
+
+	// for ele in cf.methods {
+	// 	let attr = match ele.attributes.iter().find(|a| matches!(a.attr, IRAttribute::Code(_))) {
+	// 		Some(code) => match &code.attr {
+	// 			IRAttribute::Code(code) => code,
+	// 			_ => panic!("fuck you"),
+	// 		},
+	// 		None => panic!("fuck"),
+	// 	};
+
+	// 	println!("{:X?} | {:?}", attr.code, ele.name);
+	// 	let code_len = attr.code.len();
+	// 	let mut code = Cursor::new(&attr.code);
+	// 	let mut insns = Vec::new();
+	// 	while code.position() as usize != code_len {
+	// 		let insn = Instructions::read(&cf.cp, &mut code).unwrap();
+	// 		dbg!(&insn);
+	// 		insns.push(insn);
+	// 	}
+
+	// 	println!("{insns:?}");
+	// }
+
 	let path = Path::new("crates/maya-test-bin/data");
 
 	fn compile_classes<'a>(dir: &'a Path) {
@@ -24,7 +55,29 @@ fn main() -> eyre::Result<()> {
 				let cf = IOClassFile::read(&mut buffer).unwrap();
 				let cf = IRClassFile::from_io(cf).unwrap();
 				println!("Parsed: {name:?}");
-				println!("{:#?}", cf);
+
+				for ele in cf.methods {
+					let attr = match ele.attributes.iter().find(|a| matches!(a.attr, IRAttribute::Code(_))) {
+						Some(code) => match &code.attr {
+							IRAttribute::Code(code) => code,
+							_ => panic!("fuck you"),
+						},
+						None => continue,
+					};
+
+					println!("{:X?} | {:?}", attr.code, ele.name);
+					let code_len = attr.code.len();
+					let mut code = Cursor::new(&attr.code);
+					let mut insns = Vec::new();
+					while code.position() as usize != code_len {
+						let insn = Instructions::read(&cf.cp, &mut code).unwrap();
+						dbg!(&insn);
+						insns.push(insn);
+					}
+
+					println!("{insns:?}");
+					println!("--")
+				}
 			}
 		}
 	}

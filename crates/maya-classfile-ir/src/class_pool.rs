@@ -244,6 +244,107 @@ impl CPPackageInfoRef {
 	}
 }
 
+#[macro_export]
+macro_rules! get_from_cp {
+	($cp:ident, $idx:ident, $ty:ident) => {{
+		match $cp.get(*$idx as usize - 1).expect("fuck") {
+			IRCpTag::$ty(v) => v,
+			t => panic!("expected different type: {} | got: {t:?}", stringify!($ty)),
+		}
+		.clone()
+	}};
+}
+
+#[derive(Debug, Clone)]
+pub struct CPFieldRef {
+	pub class: CPClassRef,
+	pub name_and_ty: CPNameAndTypeRef,
+	pub index: u16,
+}
+
+impl CPFieldRef {
+	pub fn new(cp: &[IRCpTag], index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::FieldRef {
+				class_index,
+				name_and_ty,
+			} => {
+				let class_tag = cp.get(class_index.saturating_sub(1) as usize).expect("fuck");
+				Self {
+					class: CPClassRef::new(*class_index, class_tag),
+					name_and_ty: name_and_ty.clone(),
+					index,
+				}
+			}
+			_ => panic!("trying to make CPUtf8Ref from non-utf8 tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(cp, index, tag)
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct CPMethodRef {
+	pub class: CPClassRef,
+	pub name_and_ty: CPNameAndTypeRef,
+	pub index: u16,
+}
+
+impl CPMethodRef {
+	pub fn new(cp: &[IRCpTag], index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::MethodRef {
+				class_index,
+				name_and_ty,
+			} => {
+				let class_tag = cp.get(class_index.saturating_sub(1) as usize).expect("fuck");
+				Self {
+					class: CPClassRef::new(*class_index, class_tag),
+					name_and_ty: name_and_ty.clone(),
+					index,
+				}
+			}
+			_ => panic!("trying to make CPUtf8Ref from non-utf8 tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(cp, index, tag)
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct CPInvokeDynamicRef {
+	pub bootstrap_method_attr_index: u16,
+	pub name_and_ty: CPNameAndTypeRef,
+	pub index: u16,
+}
+
+impl CPInvokeDynamicRef {
+	pub fn new(cp: &[IRCpTag], index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::InvokeDynamic {
+				bootstrap_method_attr_index,
+				name_and_ty,
+			} => Self {
+				bootstrap_method_attr_index: *bootstrap_method_attr_index,
+				name_and_ty: name_and_ty.clone(),
+				index,
+			},
+			_ => panic!("trying to make CPUtf8Ref from non-utf8 tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(cp, index, tag)
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct CPTagRef {
 	pub tag: IRCpTag,
@@ -258,17 +359,6 @@ impl CPTagRef {
 			index,
 		}
 	}
-}
-
-#[macro_export]
-macro_rules! get_from_cp {
-	($cp:ident, $idx:expr, $ty:ident) => {{
-		match $cp.get($idx as usize - 1).expect("fuck") {
-			IRCpTag::$ty(v) => v,
-			t => panic!("expected different type: {} | got: {t:?}", stringify!($ty)),
-		}
-		.clone()
-	}};
 }
 
 #[derive(Debug, Clone)]
