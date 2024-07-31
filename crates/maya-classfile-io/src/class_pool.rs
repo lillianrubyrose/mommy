@@ -67,6 +67,12 @@ pub enum IOCpTag {
 		bootstrap_method_attr_index: u16,
 		name_and_ty_index: u16,
 	} = 18,
+	Module {
+		name_index: u16,
+	} = 19,
+	Package {
+		name_index: u16,
+	} = 20,
 }
 
 impl IOCpTag {
@@ -131,6 +137,12 @@ impl IOCpTag {
 				bootstrap_method_attr_index: buffer.read_u16()?,
 				name_and_ty_index: buffer.read_u16()?,
 			}),
+			19 => Ok(IOCpTag::Module {
+				name_index: buffer.read_u16()?,
+			}),
+			20 => Ok(IOCpTag::Package {
+				name_index: buffer.read_u16()?,
+			}),
 			_ => unimplemented!("unimplemented tag: {tag}"),
 		}
 	}
@@ -177,6 +189,8 @@ impl IOCpTag {
 				bootstrap_method_attr_index: _,
 				name_and_ty_index: _,
 			} => 18,
+			Self::Module { name_index: _ } => 19,
+			Self::Package { name_index: _ } => 19,
 		}
 	}
 
@@ -253,6 +267,12 @@ impl IOCpTag {
 			} => {
 				buffer.write_u16(*bootstrap_method_attr_index)?;
 				buffer.write_u16(*name_and_type_index)?;
+			}
+			IOCpTag::Module { name_index } => {
+				buffer.write_u16(*name_index)?;
+			}
+			IOCpTag::Package { name_index } => {
+				buffer.write_u16(*name_index)?;
 			}
 		}
 		Ok(())

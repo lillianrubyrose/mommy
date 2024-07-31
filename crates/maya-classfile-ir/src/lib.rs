@@ -132,8 +132,14 @@ impl IRClassFile {
 		};
 		let cp = IRCpTag::from_io(raw.cp).unwrap();
 		let access_flags = raw.access_flags;
-		let this_class = CPClassRef::new(raw.this_class, cp.get(raw.this_class as usize - 1).unwrap());
-		let super_class = CPClassRef::new(raw.super_class, cp.get(raw.super_class as usize - 1).unwrap());
+		let this_class = CPClassRef::new(
+			raw.this_class,
+			cp.get(raw.this_class.saturating_sub(1) as usize).unwrap(),
+		);
+		let super_class = CPClassRef::new(
+			raw.super_class,
+			cp.get(raw.super_class.saturating_sub(1) as usize).unwrap(),
+		);
 		let interfaces = raw
 			.interfaces
 			.iter()

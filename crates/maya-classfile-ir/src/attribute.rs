@@ -4,7 +4,8 @@ use maya_bytes::BytesReadExt;
 use maya_classfile_io::IOAttributeInfo;
 
 use crate::class_pool::{
-	CPClassRef, CPConstValueRef, CPMethodHandleRef, CPNameAndTypeRef, CPTagRef, CPUtf8Ref, IRClassfileError, IRCpTag,
+	CPClassRef, CPConstValueRef, CPMethodHandleRef, CPModuleInfoRef, CPNameAndTypeRef, CPPackageInfoRef, CPTagRef,
+	CPUtf8Ref, IRClassfileError, IRCpTag,
 };
 
 #[derive(Debug, Clone)]
@@ -649,6 +650,112 @@ impl RuntimeTypeAnnotation {
 }
 
 #[derive(Debug, Clone)]
+pub struct ModuleRequiresEntry {
+	pub module: CPModuleInfoRef,
+	pub flags: u16,
+	pub version: Option<CPUtf8Ref>,
+}
+
+impl ModuleRequiresEntry {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let module_idx = buffer.read_u16()?;
+		let flags = buffer.read_u16()?;
+		let version_idx = buffer.read_u16()?;
+
+		Ok(Self {
+			module: CPModuleInfoRef::from_cp(cp, module_idx),
+			flags,
+			version: if version_idx == 0 {
+				None
+			} else {
+				Some(CPUtf8Ref::from_cp(cp, version_idx))
+			},
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleExportsEntry {
+	pub package: CPPackageInfoRef,
+	pub flags: u16,
+	pub exports: Vec<CPModuleInfoRef>,
+}
+
+impl ModuleExportsEntry {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let package_idx = buffer.read_u16()?;
+		let flags = buffer.read_u16()?;
+
+		let n_exports = buffer.read_u16()? as usize;
+		let mut exports = Vec::with_capacity(n_exports);
+
+		for _ in 0..n_exports {
+			exports.push(CPModuleInfoRef::from_cp(cp, buffer.read_u16()?));
+		}
+
+		Ok(Self {
+			package: CPPackageInfoRef::from_cp(cp, package_idx),
+			flags,
+			exports,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleOpensEntry {
+	pub package: CPPackageInfoRef,
+	pub flags: u16,
+	pub opens: Vec<CPModuleInfoRef>,
+}
+
+impl ModuleOpensEntry {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let package_idx = buffer.read_u16()?;
+		let flags = buffer.read_u16()?;
+
+		let n_opens = buffer.read_u16()? as usize;
+		let mut opens = Vec::with_capacity(n_opens);
+
+		for _ in 0..n_opens {
+			opens.push(CPModuleInfoRef::from_cp(cp, buffer.read_u16()?));
+		}
+
+		Ok(Self {
+			package: CPPackageInfoRef::from_cp(cp, package_idx),
+			flags,
+			opens,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleProvidesEntry {
+	pub class: CPClassRef,
+	pub flags: u16,
+	pub provides: Vec<CPClassRef>,
+}
+
+impl ModuleProvidesEntry {
+	pub fn new<B: BytesReadExt>(cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
+		let package_idx = buffer.read_u16()?;
+		let flags = buffer.read_u16()?;
+
+		let n_exports = buffer.read_u16()? as usize;
+		let mut provides = Vec::with_capacity(n_exports);
+
+		for _ in 0..n_exports {
+			provides.push(CPClassRef::from_cp(cp, buffer.read_u16()?));
+		}
+
+		Ok(Self {
+			class: CPClassRef::from_cp(cp, package_idx),
+			flags,
+			provides,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct IRAttributeInfo {
 	pub name: CPUtf8Ref,
 	pub length: u32,
@@ -733,13 +840,32 @@ pub enum IRAttribute {
 	RuntimeInvisibleTypeAnnotations {
 		annotations: Vec<RuntimeTypeAnnotation>,
 	},
+	Module {
+		module_name: CPModuleInfoRef,
+		module_flags: u16,
+		module_version: Option<CPUtf8Ref>,
+
+		requires: Vec<ModuleRequiresEntry>,
+		exports: Vec<ModuleExportsEntry>,
+		opens: Vec<ModuleOpensEntry>,
+
+		uses: Vec<CPClassRef>,
+
+		provides: Vec<ModuleProvidesEntry>,
+	},
+	ModulePackages {
+		packages: Vec<CPPackageInfoRef>,
+	},
+	ModuleMainClass {
+		class: CPClassRef,
+	},
 }
 
 impl IRAttribute {
-	pub fn new<B: BytesReadExt>(name: CPUtf8Ref, cp: &[IRCpTag], data: &mut B) -> Result<Self, IRClassfileError> {
+	pub fn new<B: BytesReadExt>(name: CPUtf8Ref, cp: &[IRCpTag], buffer: &mut B) -> Result<Self, IRClassfileError> {
 		Ok(match name.data.as_str() {
 			"ConstantValue" => {
-				let cp_idx = data.read_u16()?;
+				let cp_idx = buffer.read_u16()?;
 				let tag = cp.get(cp_idx as usize - 1).expect("invalid index fuck u");
 				match tag {
 					IRCpTag::Integer(value) => {
@@ -757,43 +883,43 @@ impl IRAttribute {
 				}
 			}
 
-			"Code" => Self::Code(CodeAttribute::new(cp, data)?),
+			"Code" => Self::Code(CodeAttribute::new(cp, buffer)?),
 
 			"StackMapTable" => {
-				let n_entries = data.read_u16()? as usize;
+				let n_entries = buffer.read_u16()? as usize;
 				let mut entries = Vec::with_capacity(n_entries);
 
 				for _ in 0..n_entries {
-					entries.push(StackMapFrame::new(data)?);
+					entries.push(StackMapFrame::new(buffer)?);
 				}
 
 				Self::StackMapTable(StackMapTableAttribute { entries })
 			}
 
 			"Exceptions" => {
-				let n_exceptions = data.read_u16()? as usize;
+				let n_exceptions = buffer.read_u16()? as usize;
 				let mut exception_index_table = Vec::with_capacity(n_exceptions);
 
 				for _ in 0..n_exceptions {
-					let idx = data.read_u16()?;
+					let idx = buffer.read_u16()?;
 					exception_index_table.push(CPUtf8Ref::new(idx, cp.get(idx as usize).expect("expected utf8")));
 				}
 
 				Self::Exceptions { exception_index_table }
 			}
 
-			"LineNumberTable" => Self::LineNumberTable(LineNumberTableAttribute::new(data)?),
+			"LineNumberTable" => Self::LineNumberTable(LineNumberTableAttribute::new(buffer)?),
 			"SourceFile" => {
-				let index = data.read_u16()?;
+				let index = buffer.read_u16()?;
 				let tag = CPUtf8Ref::new(index, cp.get(index as usize - 1).expect("expected utf8"));
 				Self::SourceFile(tag)
 			}
 			"NestMembers" => {
-				let n_classes = data.read_u16()? as usize;
+				let n_classes = buffer.read_u16()? as usize;
 				let mut classes = Vec::with_capacity(n_classes);
 
 				for _ in 0..n_classes {
-					let index = data.read_u16()?;
+					let index = buffer.read_u16()?;
 					let tag = cp.get(index as usize - 1).expect("expected class");
 					classes.push(CPClassRef::new(index, tag));
 				}
@@ -801,65 +927,65 @@ impl IRAttribute {
 				Self::NestMembers { classes }
 			}
 			"InnerClasses" => {
-				let n_classes = data.read_u16()? as usize;
+				let n_classes = buffer.read_u16()? as usize;
 				let mut classes = Vec::with_capacity(n_classes);
 
 				for _ in 0..n_classes {
-					classes.push(InnerClassesAttributeClass::new(cp, data)?);
+					classes.push(InnerClassesAttributeClass::new(cp, buffer)?);
 				}
 
 				Self::InnerClasses(InnerClassesAttribute { classes })
 			}
 			"Synthetic" => Self::Synthetic,
 			"Signature" => {
-				let idx = data.read_u16()?;
+				let idx = buffer.read_u16()?;
 				Self::Signature(CPUtf8Ref::new(idx, cp.get(idx as usize - 1).expect("expected utf8")))
 			}
 			"NestHost" => {
-				let idx = data.read_u16()?;
+				let idx = buffer.read_u16()?;
 				Self::NestHost(CPClassRef::new(idx, cp.get(idx as usize - 1).expect("expected class")))
 			}
 			"MethodParameters" => {
-				let n_params = data.read_u8()? as usize;
+				let n_params = buffer.read_u8()? as usize;
 				let mut parameters = Vec::with_capacity(n_params);
 
 				for _ in 0..n_params {
-					parameters.push(MethodParametersParam::new(cp, data)?);
+					parameters.push(MethodParametersParam::new(cp, buffer)?);
 				}
 
 				Self::MethodParameters { parameters }
 			}
 			"Deprecated" => Self::Deprecated,
 			"RuntimeVisibleAnnotations" => {
-				let n_annotations = data.read_u16()? as usize;
+				let n_annotations = buffer.read_u16()? as usize;
 				let mut annotations = Vec::with_capacity(n_annotations);
 
 				for _ in 0..n_annotations {
-					annotations.push(RuntimeAnnotation::new(cp, data)?);
+					annotations.push(RuntimeAnnotation::new(cp, buffer)?);
 				}
 
 				Self::RuntimeVisibleAnnotations { annotations }
 			}
 			"RuntimeInvisibleAnnotations" => {
-				let n_annotations = data.read_u16()? as usize;
+				let n_annotations = buffer.read_u16()? as usize;
 				let mut annotations = Vec::with_capacity(n_annotations);
 
 				for _ in 0..n_annotations {
-					annotations.push(RuntimeAnnotation::new(cp, data)?);
+					annotations.push(RuntimeAnnotation::new(cp, buffer)?);
 				}
 
 				Self::RuntimeInvisibleAnnotations { annotations }
 			}
 			"RuntimeVisibleParameterAnnotations" => {
-				let n_params = data.read_u8()? as usize;
+				let n_params = buffer.read_u8()? as usize;
 				let mut params = Vec::with_capacity(n_params);
 
 				for _ in 0..n_params {
-					let n_annotations = data.read_u16()? as usize;
+					let n_annotations = buffer.read_u16()? as usize;
 					let mut annotations = Vec::with_capacity(n_annotations);
 
 					for _ in 0..n_annotations {
-						annotations.push(RuntimeAnnotation::new(cp, data)?);
+						annotations.push(RuntimeAnnotation::new(cp, buffer)?);
 					}
 
 					params.push(annotations);
@@ -868,15 +994,15 @@ impl IRAttribute {
 				Self::RuntimeVisibleParameterAnnotations { params }
 			}
 			"RuntimeInvisibleParameterAnnotations" => {
-				let n_params = data.read_u8()? as usize;
+				let n_params = buffer.read_u8()? as usize;
 				let mut params = Vec::with_capacity(n_params);
 
 				for _ in 0..n_params {
-					let n_annotations = data.read_u16()? as usize;
+					let n_annotations = buffer.read_u16()? as usize;
 					let mut annotations = Vec::with_capacity(n_annotations);
 
 					for _ in 0..n_annotations {
-						annotations.push(RuntimeAnnotation::new(cp, data)?);
+						annotations.push(RuntimeAnnotation::new(cp, buffer)?);
 					}
 
 					params.push(annotations);
@@ -885,82 +1011,143 @@ impl IRAttribute {
 				Self::RuntimeInvisibleParameterAnnotations { params }
 			}
 			"Record" => {
-				let n_components = data.read_u16()? as usize;
+				let n_components = buffer.read_u16()? as usize;
 				let mut components = Vec::with_capacity(n_components);
 
 				for _ in 0..n_components {
-					components.push(RecordComponentInfo::new(cp, data)?);
+					components.push(RecordComponentInfo::new(cp, buffer)?);
 				}
 
 				Self::Record { components }
 			}
 			"BootstrapMethods" => {
-				let n_methods = data.read_u16()? as usize;
+				let n_methods = buffer.read_u16()? as usize;
 				let mut methods = Vec::with_capacity(n_methods);
 
 				for _ in 0..n_methods {
-					methods.push(BootstrapMethodsMethod::new(cp, data)?);
+					methods.push(BootstrapMethodsMethod::new(cp, buffer)?);
 				}
 
 				Self::BootstrapMethods { methods }
 			}
 			"PermittedSubclasses" => {
-				let n_classes = data.read_u16()? as usize;
+				let n_classes = buffer.read_u16()? as usize;
 				let mut classes = Vec::with_capacity(n_classes);
 
 				for _ in 0..n_classes {
-					classes.push(CPClassRef::from_cp(cp, data.read_u16()?));
+					classes.push(CPClassRef::from_cp(cp, buffer.read_u16()?));
 				}
 
 				Self::PermittedSubclasses { classes }
 			}
-			"SourceDebugExtension" => Self::SourceDebugExtension(Rc::new(String::from_utf8(data.read_to_vec()?)?)),
+			"SourceDebugExtension" => Self::SourceDebugExtension(Rc::new(String::from_utf8(buffer.read_to_vec()?)?)),
 			"LocalVariableTable" => {
-				let n_entries = data.read_u16()? as usize;
+				let n_entries = buffer.read_u16()? as usize;
 				let mut table = Vec::with_capacity(n_entries);
 
 				for _ in 0..n_entries {
-					table.push(LocalVariableTableEntry::new(cp, data)?);
+					table.push(LocalVariableTableEntry::new(cp, buffer)?);
 				}
 
 				Self::LocalVariableTable { table }
 			}
 			"LocalVariableTypeTable" => {
-				let n_entries = data.read_u16()? as usize;
+				let n_entries = buffer.read_u16()? as usize;
 				let mut table = Vec::with_capacity(n_entries);
 
 				for _ in 0..n_entries {
-					table.push(LocalVariableTypeTableEntry::new(cp, data)?);
+					table.push(LocalVariableTypeTableEntry::new(cp, buffer)?);
 				}
 
 				Self::LocalVariableTypeTable { table }
 			}
 			"EnclosingMethod" => Self::EnclosingMethod {
-				class: CPClassRef::from_cp(cp, data.read_u16()?),
-				method: CPNameAndTypeRef::from_cp(cp, data.read_u16()?),
+				class: CPClassRef::from_cp(cp, buffer.read_u16()?),
+				method: CPNameAndTypeRef::from_cp(cp, buffer.read_u16()?),
 			},
 			"RuntimeVisibleTypeAnnotations" => {
-				let n_annotations = data.read_u16()? as usize;
+				let n_annotations = buffer.read_u16()? as usize;
 				let mut annotations = Vec::with_capacity(n_annotations);
 
 				for _ in 0..n_annotations {
-					annotations.push(RuntimeTypeAnnotation::new(cp, data)?);
+					annotations.push(RuntimeTypeAnnotation::new(cp, buffer)?);
 				}
 
 				Self::RuntimeVisibleTypeAnnotations { annotations }
 			}
 			"RuntimeInvisibleTypeAnnotations" => {
-				let n_annotations = data.read_u16()? as usize;
+				let n_annotations = buffer.read_u16()? as usize;
 				let mut annotations = Vec::with_capacity(n_annotations);
 
 				for _ in 0..n_annotations {
-					annotations.push(RuntimeTypeAnnotation::new(cp, data)?);
+					annotations.push(RuntimeTypeAnnotation::new(cp, buffer)?);
 				}
 
 				Self::RuntimeInvisibleTypeAnnotations { annotations }
 			}
 			"AnnotationDefault" => Self::AnnotationDefault {
-				default_value: RuntimeAnnotationValue::new(cp, data)?,
+				default_value: RuntimeAnnotationValue::new(cp, buffer)?,
+			},
+			"Module" => {
+				let module_name_idx = buffer.read_u16()?;
+				let module_flags = buffer.read_u16()?;
+				let module_version_idx = buffer.read_u16()?;
+
+				let n_requires = buffer.read_u16()? as usize;
+				let mut requires = Vec::with_capacity(n_requires);
+				for _ in 0..n_requires {
+					requires.push(ModuleRequiresEntry::new(cp, buffer)?);
+				}
+
+				let n_exports = buffer.read_u16()? as usize;
+				let mut exports = Vec::with_capacity(n_exports);
+				for _ in 0..n_exports {
+					exports.push(ModuleExportsEntry::new(cp, buffer)?);
+				}
+
+				let n_opens = buffer.read_u16()? as usize;
+				let mut opens = Vec::with_capacity(n_opens);
+				for _ in 0..n_opens {
+					opens.push(ModuleOpensEntry::new(cp, buffer)?);
+				}
+
+				let n_uses = buffer.read_u16()? as usize;
+				let mut uses = Vec::with_capacity(n_uses);
+				for _ in 0..n_uses {
+					uses.push(CPClassRef::from_cp(cp, buffer.read_u16()?));
+				}
+
+				let n_provides = buffer.read_u16()? as usize;
+				let mut provides = Vec::with_capacity(n_provides);
+				for _ in 0..n_provides {
+					provides.push(ModuleProvidesEntry::new(cp, buffer)?);
+				}
+
+				Self::Module {
+					module_name: CPModuleInfoRef::from_cp(cp, module_name_idx),
+					module_flags,
+					module_version: if module_version_idx == 0 {
+						None
+					} else {
+						Some(CPUtf8Ref::from_cp(cp, module_version_idx))
+					},
+					requires,
+					exports,
+					opens,
+					uses,
+					provides,
+				}
+			}
+			"ModulePackages" => {
+				let n_packages = buffer.read_u16()? as usize;
+				let mut packages = Vec::with_capacity(n_packages);
+				for _ in 0..n_packages {
+					packages.push(CPPackageInfoRef::from_cp(cp, buffer.read_u16()?));
+				}
+				Self::ModulePackages { packages }
+			}
+			"ModuleMainClass" => Self::ModuleMainClass {
+				class: CPClassRef::from_cp(cp, buffer.read_u16()?),
 			},
 
 			n => panic!("unparsed attribute: {n}"),
@@ -998,6 +1185,18 @@ impl IRAttribute {
 			Self::PermittedSubclasses { classes: _ } => "PermittedSubclasses",
 			Self::RuntimeVisibleTypeAnnotations { annotations: _ } => "RuntimeVisibleTypeAnnotations",
 			Self::RuntimeInvisibleTypeAnnotations { annotations: _ } => "RuntimeInvisibleTypeAnnotations",
+			Self::Module {
+				module_name: _,
+				module_flags: _,
+				module_version: _,
+				requires: _,
+				exports: _,
+				opens: _,
+				uses: _,
+				provides: _,
+			} => "Module",
+			Self::ModulePackages { packages: _ } => "ModulePackages",
+			Self::ModuleMainClass { class: _ } => "ModuleMainClass",
 		}
 	}
 }

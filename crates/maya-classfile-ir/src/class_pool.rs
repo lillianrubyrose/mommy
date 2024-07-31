@@ -113,7 +113,7 @@ impl CPUtf8Ref {
 	}
 
 	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
-		let tag = cp.get(index as usize - 1).expect("expected tag");
+		let tag = cp.get(index.saturating_sub(1) as usize).expect("expected tag");
 		Self::new(index, tag)
 	}
 }
@@ -199,6 +199,52 @@ impl CPMethodHandleRef {
 }
 
 #[derive(Debug, Clone)]
+pub struct CPModuleInfoRef {
+	pub data: CPUtf8Ref,
+	pub index: u16,
+}
+
+impl CPModuleInfoRef {
+	pub fn new(index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::Module { name } => Self {
+				data: name.clone(),
+				index,
+			},
+			_ => panic!("trying to make CPModuleInfoRef from non-CPModuleInfoRef tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(index, tag)
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct CPPackageInfoRef {
+	pub data: CPUtf8Ref,
+	pub index: u16,
+}
+
+impl CPPackageInfoRef {
+	pub fn new(index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::Package { name } => Self {
+				data: name.clone(),
+				index,
+			},
+			_ => panic!("trying to make CPUtf8Ref from non-utf8 tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(index, tag)
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct CPTagRef {
 	pub tag: IRCpTag,
 	pub index: u16,
@@ -264,6 +310,12 @@ pub enum IRCpTag {
 		bootstrap_method_attr_index: u16,
 		name_and_ty: CPNameAndTypeRef,
 	} = 18,
+	Module {
+		name: CPUtf8Ref,
+	} = 19,
+	Package {
+		name: CPUtf8Ref,
+	} = 20,
 }
 
 macro_rules! parse_tag_idx {
@@ -394,6 +446,18 @@ impl IRCpTag {
 						name: name.clone(),
 						ty: ty.clone(),
 					},
+				}
+			}
+			IOCpTag::Module { name_index } => {
+				let name_tag = parse_tag_idx!(name_index, raw_tags, formed_tags).expect("expected utf8 tag");
+				IRCpTag::Module {
+					name: CPUtf8Ref::new(*name_index, &name_tag),
+				}
+			}
+			IOCpTag::Package { name_index } => {
+				let name_tag = parse_tag_idx!(name_index, raw_tags, formed_tags).expect("expected utf8 tag");
+				IRCpTag::Package {
+					name: CPUtf8Ref::new(*name_index, &name_tag),
 				}
 			}
 		})
