@@ -115,7 +115,7 @@ impl StackMapFrame {
 			},
 			64..=127 => Self::SameLocals1StackItemFrame {
 				frame_type,
-				offset_delta: (64 - frame_type) as u16,
+				offset_delta: (frame_type - 64) as u16,
 				stack: VerificationTypeInfo::read(attribute_data)?,
 			},
 			247 => Self::SameLocals1StackItemFrameExtended {
@@ -789,7 +789,7 @@ pub enum IRAttribute {
 	InnerClasses(InnerClassesAttribute),
 	EnclosingMethod {
 		class: CPClassRef,
-		method: CPNameAndTypeRef,
+		method: Option<CPNameAndTypeRef>,
 	},
 	Synthetic,
 	Signature(CPUtf8Ref),
@@ -1061,10 +1061,18 @@ impl IRAttribute {
 
 				Self::LocalVariableTypeTable { table }
 			}
-			"EnclosingMethod" => Self::EnclosingMethod {
-				class: CPClassRef::from_cp(cp, buffer.read_u16()?),
-				method: CPNameAndTypeRef::from_cp(cp, buffer.read_u16()?),
-			},
+			"EnclosingMethod" => {
+				let class_idx = buffer.read_u16()?;
+				let method_idx = buffer.read_u16()?;
+				Self::EnclosingMethod {
+					class: CPClassRef::from_cp(cp, class_idx),
+					method: if method_idx == 0 {
+						None
+					} else {
+						Some(CPNameAndTypeRef::from_cp(cp, method_idx))
+					},
+				}
+			}
 			"RuntimeVisibleTypeAnnotations" => {
 				let n_annotations = buffer.read_u16()? as usize;
 				let mut annotations = Vec::with_capacity(n_annotations);

@@ -45,7 +45,8 @@ impl IOClassFile {
 		let major_version = buffer.read_u16()?;
 		let cp_count = buffer.read_u16()?;
 		let mut cp = Vec::with_capacity(cp_count as usize - 1);
-		for _ in 0..cp_count - 1 {
+		for i in 0..cp_count - 1 {
+			print!("{i} - ");
 			cp.push(IOCpTag::read(buffer)?);
 		}
 		let access_flags = buffer.read_u16()?;

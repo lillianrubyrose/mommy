@@ -1,7 +1,8 @@
 use maya_bytes::BytesReadExt;
 
 use crate::class_pool::{
-	CPClassRef, CPFieldRef, CPInvokeDynamicRef, CPMethodHandleRef, CPMethodRef, CPUtf8Ref, IRClassfileError, IRCpTag,
+	CPClassRef, CPFieldRef, CPInterfaceMethodRef, CPInvokeDynamicRef, CPMethodHandleRef, CPMethodRef, CPUtf8Ref,
+	IRClassfileError, IRCpTag,
 };
 
 #[allow(non_camel_case_types)]
@@ -189,7 +190,7 @@ pub enum Instructions {
 	FCONST_2 = 13,
 	DCONST_0 = 14,
 	DCONST_1 = 15,
-	BIPUSH = 16,
+	BIPUSH(u8) = 16,
 	SIPUSH(u16) = 17,
 	LDC(IRCpTag) = 18,
 	ILOAD(u8) = 21,
@@ -263,7 +264,8 @@ pub enum Instructions {
 	LOR = 129,
 	IXOR = 130,
 	LXOR = 131,
-	IINC = 132,
+	// https://docs.oracle.com/javase/specs/jvms/se22/html/jvms-6.html#jvms-6.5.areturn
+	IINC { index: u8, r#const: u8 } = 132,
 	I2L = 133,
 	I2F = 134,
 	I2D = 135,
@@ -298,7 +300,7 @@ pub enum Instructions {
 	IF_ICMPLE(u16) = 164,
 	IF_ACMPEQ(u16) = 165,
 	IF_ACMPNE(u16) = 166,
-	GOTO = 167,
+	GOTO(u16) = 167,
 	JSR = 168,
 	RET = 169,
 	TABLESWITCH = 170,
@@ -316,20 +318,21 @@ pub enum Instructions {
 	INVOKEVIRTUAL(CPMethodRef) = 182,
 	INVOKESPECIAL(CPMethodRef) = 183,
 	INVOKESTATIC(CPMethodRef) = 184,
-	INVOKEINTERFACE(CPMethodRef) = 185,
+	INVOKEINTERFACE { method: CPInterfaceMethodRef, count: u8 } = 185,
 	INVOKEDYNAMIC(CPInvokeDynamicRef) = 186,
 	NEW(CPClassRef) = 187,
-	NEWARRAY = 188,
-	ANEWARRAY = 189,
+	// https://docs.oracle.com/javase/specs/jvms/se22/html/jvms-6.html#jvms-6.5.areturn
+	NEWARRAY(u8) = 188,
+	ANEWARRAY(CPClassRef) = 189,
 	ARRAYLENGTH = 190,
 	ATHROW = 191,
-	CHECKCAST = 192,
-	INSTANCEOF = 193,
+	CHECKCAST(CPClassRef) = 192,
+	INSTANCEOF(CPClassRef) = 193,
 	MONITORENTER = 194,
 	MONITOREXIT = 195,
 	MULTIANEWARRAY = 197,
-	IFNULL = 198,
-	IFNONNULL = 199,
+	IFNULL(u16) = 198,
+	IFNONNULL(u16) = 199,
 }
 
 impl Instructions {
@@ -337,13 +340,29 @@ impl Instructions {
 		Ok(match buffer.read_u8()? {
 			Opcodes::GETFIELD => Instructions::GETFIELD(CPFieldRef::from_cp(cp, buffer.read_u16()?)),
 			Opcodes::GETSTATIC => Instructions::GETSTATIC(CPFieldRef::from_cp(cp, buffer.read_u16()?)),
+			Opcodes::PUTSTATIC => Instructions::PUTSTATIC(CPFieldRef::from_cp(cp, buffer.read_u16()?)),
 			Opcodes::LDC => Instructions::LDC(
 				cp.get(buffer.read_u8()?.saturating_sub(1) as usize)
 					.cloned()
 					.expect("fuck"),
 			),
+			/* LDC_W */
+			0x13 => Instructions::LDC(
+				cp.get(buffer.read_u16()?.saturating_sub(1) as usize)
+					.cloned()
+					.expect("fuck"),
+			),
 			Opcodes::INVOKEVIRTUAL => Instructions::INVOKEVIRTUAL(CPMethodRef::from_cp(cp, buffer.read_u16()?)),
 			Opcodes::INVOKESPECIAL => Instructions::INVOKESPECIAL(CPMethodRef::from_cp(cp, buffer.read_u16()?)),
+			Opcodes::INVOKESTATIC => Instructions::INVOKESTATIC(CPMethodRef::from_cp(cp, buffer.read_u16()?)),
+			Opcodes::INVOKEINTERFACE => {
+				let s = Instructions::INVOKEINTERFACE {
+					method: CPInterfaceMethodRef::from_cp(cp, buffer.read_u16()?),
+					count: buffer.read_u8()?,
+				};
+				buffer.read_u8()?;
+				s
+			}
 			Opcodes::INVOKEDYNAMIC => {
 				let s = Instructions::INVOKEDYNAMIC(CPInvokeDynamicRef::from_cp(cp, buffer.read_u16()?));
 				buffer.read_u16()?;
@@ -373,6 +392,7 @@ impl Instructions {
 			Opcodes::ICONST_5 => Instructions::ICONST_5,
 			Opcodes::IRETURN => Instructions::IRETURN,
 			Opcodes::ARETURN => Instructions::ARETURN,
+			Opcodes::FRETURN => Instructions::FRETURN,
 			Opcodes::ILOAD => Instructions::ILOAD(buffer.read_u8()?),
 			/* iload_0 */ 0x1A => Instructions::ILOAD(0),
 			/* iload_1 */ 0x1B => Instructions::ILOAD(1),
@@ -399,9 +419,20 @@ impl Instructions {
 			Opcodes::IF_ICMPLE => Instructions::IF_ICMPLE(buffer.read_u16()?),
 			Opcodes::IF_ACMPEQ => Instructions::IF_ACMPEQ(buffer.read_u16()?),
 			Opcodes::IF_ACMPNE => Instructions::IF_ACMPNE(buffer.read_u16()?),
+			Opcodes::IFNULL => Instructions::IFNULL(buffer.read_u16()?),
+			Opcodes::IFNONNULL => Instructions::IFNONNULL(buffer.read_u16()?),
+			Opcodes::GOTO => Instructions::GOTO(buffer.read_u16()?),
 
 			Opcodes::LCONST_0 => Instructions::LCONST_0,
 			Opcodes::LCONST_1 => Instructions::LCONST_1,
+
+			Opcodes::AASTORE => Instructions::AASTORE,
+
+			Opcodes::FLOAD => Instructions::FLOAD(buffer.read_u8()?),
+			/* fload_0 */ 0x22 => Instructions::FLOAD(0),
+			/* fload_1 */ 0x23 => Instructions::FLOAD(1),
+			/* fload_2 */ 0x24 => Instructions::FLOAD(2),
+			/* fload_3 */ 0x25 => Instructions::FLOAD(3),
 
 			Opcodes::LLOAD => Instructions::LLOAD(buffer.read_u8()?),
 			/* lload_0 */ 0x1E => Instructions::LLOAD(0),
@@ -416,7 +447,29 @@ impl Instructions {
 			/* lstore_3 */ 0x42 => Instructions::LSTORE(3),
 
 			Opcodes::LADD => Instructions::LADD,
+			Opcodes::BIPUSH => Instructions::BIPUSH(buffer.read_u8()?),
 			Opcodes::SIPUSH => Instructions::SIPUSH(buffer.read_u16()?),
+			Opcodes::ATHROW => Instructions::ATHROW,
+			Opcodes::POP => Instructions::POP,
+			Opcodes::CHECKCAST => Instructions::CHECKCAST(CPClassRef::from_cp(cp, buffer.read_u16()?)),
+			Opcodes::INSTANCEOF => Instructions::INSTANCEOF(CPClassRef::from_cp(cp, buffer.read_u16()?)),
+			Opcodes::SWAP => Instructions::SWAP,
+			Opcodes::NOP => Instructions::NOP,
+			Opcodes::ANEWARRAY => Instructions::ANEWARRAY(CPClassRef::from_cp(cp, buffer.read_u16()?)),
+			Opcodes::IAND => Instructions::IAND,
+			Opcodes::ACONST_NULL => Instructions::ACONST_NULL,
+			Opcodes::ARRAYLENGTH => Instructions::ARRAYLENGTH,
+			Opcodes::IASTORE => Instructions::IASTORE,
+			Opcodes::IALOAD => Instructions::IALOAD,
+			Opcodes::AALOAD => Instructions::AALOAD,
+			Opcodes::IINC => Instructions::IINC {
+				index: buffer.read_u8()?,
+				r#const: buffer.read_u8()?,
+			},
+			Opcodes::NEWARRAY => Instructions::NEWARRAY(buffer.read_u8()?),
+			Opcodes::TABLESWITCH => {
+				todo!("https://docs.oracle.com/javase/specs/jvms/se22/html/jvms-6.html#jvms-6.5.tableswitch")
+			}
 
 			b => todo!("unparsed opcode 0x{b:02X}"),
 		})

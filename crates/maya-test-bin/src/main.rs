@@ -47,6 +47,7 @@ fn main() -> eyre::Result<()> {
 			}
 
 			let name = entry.file_name();
+			// if name.to_str().unwrap() == "Initializer.class" {
 			if name.to_str().unwrap().ends_with(".class") {
 				let class_content = std::fs::read(entry.path()).unwrap();
 				let mut buffer = Cursor::new(class_content);

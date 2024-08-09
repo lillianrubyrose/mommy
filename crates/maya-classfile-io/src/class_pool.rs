@@ -78,13 +78,24 @@ pub enum IOCpTag {
 impl IOCpTag {
 	pub fn read<B: BytesReadExt>(buffer: &mut B) -> Result<IOCpTag, IOClassfileError> {
 		let tag = buffer.read_u8()?;
+		println!("{tag} | {}", buffer.stream_position().expect("fak"));
 		match tag {
+			0 => {
+				let b = buffer.read_n_bytes::<50>()?;
+				let len = buffer.read_u16()?;
+				let b2 = buffer.read_n_bytes_vec(len as usize)?;
+				println!("MEW");
+				todo!()
+			}
 			1 => {
 				let len = buffer.read_u16()?;
+				dbg!(len);
 				let mut bytes = Vec::with_capacity(len as usize);
 				for _ in 0..len {
 					bytes.push(buffer.read_u8()?);
 				}
+
+				println!("{:?}", maya_mutf8::decode(&bytes).expect("mew"));
 
 				Ok(IOCpTag::Utf8 { length: len, bytes })
 			}

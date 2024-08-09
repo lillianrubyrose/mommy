@@ -161,7 +161,7 @@ impl CPNameAndTypeRef {
 	}
 
 	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
-		let tag = cp.get(index as usize - 1).expect("expected tag");
+		let tag = cp.get(index.saturating_sub(1) as usize).expect("expected tag");
 		Self::new(index, tag)
 	}
 }
@@ -346,6 +346,37 @@ impl CPInvokeDynamicRef {
 }
 
 #[derive(Debug, Clone)]
+pub struct CPInterfaceMethodRef {
+	pub class: CPClassRef,
+	pub name_and_ty: CPNameAndTypeRef,
+	pub index: u16,
+}
+
+impl CPInterfaceMethodRef {
+	pub fn new(cp: &[IRCpTag], index: u16, utf8_tag: &IRCpTag) -> Self {
+		match utf8_tag {
+			IRCpTag::InterfaceMethodRef {
+				class_index,
+				name_and_ty,
+			} => {
+				let class_tag = cp.get(class_index.saturating_sub(1) as usize).expect("fuck");
+				Self {
+					class: CPClassRef::new(*class_index, class_tag),
+					name_and_ty: name_and_ty.clone(),
+					index,
+				}
+			}
+			_ => panic!("trying to make CPUtf8Ref from non-utf8 tag. {utf8_tag:?}"),
+		}
+	}
+
+	pub fn from_cp(cp: &[IRCpTag], index: u16) -> Self {
+		let tag = cp.get(index as usize - 1).expect("expected tag");
+		Self::new(cp, index, tag)
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct CPTagRef {
 	pub tag: IRCpTag,
 	pub index: u16,
@@ -364,6 +395,7 @@ impl CPTagRef {
 #[derive(Debug, Clone)]
 #[repr(u8)]
 pub enum IRCpTag {
+	Idfk = 0,
 	Utf8(Rc<String>) = 1,
 	Integer(i32) = 3,
 	Float(f32) = 4,

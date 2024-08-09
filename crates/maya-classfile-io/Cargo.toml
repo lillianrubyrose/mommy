@@ -5,4 +5,5 @@ edition.workspace = true
 
 [dependencies]
 maya-bytes.workspace = true
+maya-mutf8.workspace = true
 thiserror.workspace = true
